@@ -3,4 +3,5 @@ node_modules
 dist
 public
 
-/static/*.png
+/static/*
+!/static/.gitkeep
