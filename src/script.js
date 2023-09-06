@@ -17,13 +17,13 @@ const renderer = new THREE.WebGLRenderer({ canvas })
 renderer.setSize(sizes.width, sizes.height)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-const loading = new OBJLoader().loadAsync('20230506133355-layer-0.obj')
+const loading = new OBJLoader().loadAsync('20230627122904-layer-10.obj')
 loading.then((object) => {
   const sdfGeometry = object.children[0].geometry
   const [ sdfTex, bvh ] = sdfTexGenerate(sdfGeometry)
 
   const cmTexture = new THREE.TextureLoader().load(textureViridis)
-  const tifTexture = new THREE.TextureLoader().load('00000.png', tick)
+  const tifTexture = new THREE.TextureLoader().load('00010.png', tick)
 
   tifTexture.minFilter = THREE.LinearFilter
   tifTexture.magFilter = THREE.LinearFilter
@@ -32,7 +32,8 @@ loading.then((object) => {
   const material = new THREE.ShaderMaterial({
     uniforms: {
       uAlpha: { value: 1 },
-      sdfTex: { value: sdfTex },
+      surface: { value: 0.001 },
+      sdfTex: { value: sdfTex.texture },
       volumeAspect : { value: 810 / 789 },
       screenAspect : { value: sizes.width / sizes.height },
       utifTexture : { value: tifTexture },
@@ -41,12 +42,13 @@ loading.then((object) => {
     vertexShader: `
       varying vec2 vUv;
       void main() {
+        vUv = vec2(uv.x, 1.0 - uv.y);
         gl_Position = vec4(position, 1.0);
-        vUv = uv;
       }
     `,
     fragmentShader: `
       varying vec2 vUv;
+      uniform float surface;
       uniform float volumeAspect;
       uniform float screenAspect;
       uniform sampler2D sdfTex;
@@ -70,16 +72,21 @@ loading.then((object) => {
         vec2 uv = vec2((vUv_.x - 0.5) * aspect, (vUv_.y - 0.5)) + vec2(0.5);
         if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ) return;
 
-        float intensity = texture2D(utifTexture, uv).r;
+        float dist = texture2D(sdfTex, uv).r - surface;
+        // To Do: image y-axis & volume y-axis (inverse, but should be consistent)
+        float intensity = texture2D(utifTexture, vec2(uv.x, 1.0 - uv.y)).r;
+
         gl_FragColor = apply_colormap(intensity);
 
-        float intensity_ = texture2D(sdfTex, uv).r;
-        gl_FragColor = vec4(intensity_, 0.0, 0.0, 1.0);
+        bool s = dist < 0.0 && dist > -surface;
+        if (s) gl_FragColor = vec4(0, 0, 0, 0.0);
 
         #include <colorspace_fragment>
       }
     `,
   })
+  // scene.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshNormalMaterial()))
+  // scene.add(new THREE.Mesh(sdfGeometry, new THREE.MeshNormalMaterial()))
   scene.add(new THREE.Mesh(geometry, material))
 
   tick()
@@ -109,6 +116,8 @@ controls.enableDamping = true
 function tick() {
   renderer.render(scene, camera)
 
+  // window.requestAnimationFrame(tick)
+
   // const imgData = renderer.domElement.toDataURL('image/png')
   // const link = document.createElement('a')
   // link.href = imgData
@@ -117,7 +126,7 @@ function tick() {
 }
 
 function sdfTexGenerate(geometry) {
-  const nrrd = { w: 810, h: 789, d: 1}
+  const nrrd = { w: 810, h: 789, d: 1 }
   const s = 1 / Math.max(nrrd.w, nrrd.h, nrrd.d)
 
   const matrix = new THREE.Matrix4()
