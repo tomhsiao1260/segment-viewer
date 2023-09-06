@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { MOUSE, TOUCH } from 'three'
 import { MeshBVH } from 'three-mesh-bvh'
 import textureViridis from './textures/cm_viridis.png'
 import { GenerateSDFMaterial } from './GenerateSDFMaterial'
@@ -17,6 +18,8 @@ const renderer = new THREE.WebGLRenderer({ canvas })
 renderer.setSize(sizes.width, sizes.height)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
+let material
+
 const loading = new OBJLoader().loadAsync('20230627122904-layer-10.obj')
 loading.then((object) => {
   const sdfGeometry = object.children[0].geometry
@@ -29,13 +32,14 @@ loading.then((object) => {
   tifTexture.magFilter = THREE.LinearFilter
 
   const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
-  const material = new THREE.ShaderMaterial({
+  material = new THREE.ShaderMaterial({
     uniforms: {
-      uAlpha: { value: 1 },
-      surface: { value: 0.001 },
-      sdfTex: { value: sdfTex.texture },
+      uAlpha : { value: 1 },
+      surface : { value: 0.001 },
+      sdfTex : { value: sdfTex.texture },
       volumeAspect : { value: 810 / 789 },
-      screenAspect : { value: sizes.width / sizes.height },
+      screenAspect : { value: 2 / 2 },
+      // screenAspect : { value: sizes.width / sizes.height },
       utifTexture : { value: tifTexture },
       cmdata : { value: cmTexture },
     },
@@ -43,7 +47,8 @@ loading.then((object) => {
       varying vec2 vUv;
       void main() {
         vUv = vec2(uv.x, 1.0 - uv.y);
-        gl_Position = vec4(position, 1.0);
+        // gl_Position = vec4(position, 1.0);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
       }
     `,
     fragmentShader: `
@@ -85,8 +90,6 @@ loading.then((object) => {
       }
     `,
   })
-  // scene.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshNormalMaterial()))
-  // scene.add(new THREE.Mesh(sdfGeometry, new THREE.MeshNormalMaterial()))
   scene.add(new THREE.Mesh(geometry, material))
 
   tick()
@@ -104,19 +107,24 @@ window.addEventListener('resize', () => {
   // Update renderer
   renderer.setSize(sizes.width, sizes.height)
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+
+  tick()
 })
 
 const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100)
-camera.position.z = 3
+camera.position.z = 1.3
 scene.add(camera)
 
 const controls = new OrbitControls(camera, canvas)
-controls.enableDamping = true
+controls.enableDamping = false
+controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
+controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
+controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_ROTATE }
+
+controls.addEventListener('change', tick)
 
 function tick() {
   renderer.render(scene, camera)
-
-  // window.requestAnimationFrame(tick)
 
   // const imgData = renderer.domElement.toDataURL('image/png')
   // const link = document.createElement('a')
