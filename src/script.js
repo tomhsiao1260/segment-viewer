@@ -5,11 +5,12 @@ import textureViridis from './textures/cm_viridis.png'
 import { GenerateSDFMaterial } from './GenerateSDFMaterial'
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { MapControls } from 'three/addons/controls/MapControls.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 
 const sizes = {
-    width: window.innerWidth,
-    height: window.innerHeight
+  width: window.innerWidth,
+  height: window.innerHeight
 }
 
 const canvas = document.querySelector('canvas.webgl')
@@ -119,18 +120,12 @@ const controls = new OrbitControls(camera, canvas)
 controls.enableDamping = false
 controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
 controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
-controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_ROTATE }
+controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }
 
 controls.addEventListener('change', tick)
 
 function tick() {
   renderer.render(scene, camera)
-
-  // const imgData = renderer.domElement.toDataURL('image/png')
-  // const link = document.createElement('a')
-  // link.href = imgData
-  // link.download = 'example'
-  // link.click()
 }
 
 function sdfTexGenerate(geometry) {
