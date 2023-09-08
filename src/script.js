@@ -21,10 +21,17 @@ const renderer = new THREE.WebGLRenderer({ canvas })
 renderer.setSize(sizes.width, sizes.height)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-let card, clipGeometry, bvhh
+let card, clipGeometry, focusGeometry, bvhh
 
 const loading1 = new OBJLoader().loadAsync('20230505164332-layer-10.obj')
 const loading2 = new OBJLoader().loadAsync('20230627122904-layer-10.obj')
+
+const cmTexture = new THREE.TextureLoader().load(textureViridis)
+const tifTexture = new THREE.TextureLoader().load('00010.png', tick)
+cmTexture.minFilter = THREE.NearestFilter
+cmTexture.magFilter = THREE.NearestFilter
+tifTexture.magFilter = THREE.NearestFilter
+tifTexture.minFilter = THREE.LinearFilter
 
 Promise.all([ loading1, loading2 ]).then((res) => {
   const sdfGeometry0 = res[0].children[0].geometry
@@ -60,18 +67,11 @@ Promise.all([ loading1, loading2 ]).then((res) => {
   // focusGeometry = updateFocusGeometry()
   // const [ sdfTexFocus, _ ] = sdfTexGenerate(focusGeometry)
 
-  const cmTexture = new THREE.TextureLoader().load(textureViridis)
-  const tifTexture = new THREE.TextureLoader().load('00010.png', tick)
-  cmTexture.minFilter = THREE.NearestFilter
-  cmTexture.magFilter = THREE.NearestFilter
-
-  tifTexture.magFilter = THREE.NearestFilter
-  // tifTexture.magFilter = THREE.LinearFilter
-  tifTexture.minFilter = THREE.LinearFilter
-
   const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
   const material = new THREE.ShaderMaterial({
+    transparent: true,
     side: THREE.BackSide,
+
     uniforms: {
       uAlpha : { value: 1 },
       surface : { value: 0.001 },
@@ -115,10 +115,13 @@ Promise.all([ loading1, loading2 ]).then((res) => {
         float dist = texture2D(sdfTex, vec2(uv.x, 1.0 - uv.y)).r - surface;
         float intensity = texture2D(utifTexture, uv).r;
 
-        gl_FragColor = apply_colormap(intensity);
+        vec4 color = apply_colormap(intensity);
+        color.a = 0.9;
+        if ( uv.x < 0.55 && uv.x > 0.45 && uv.y < 0.55 && uv.y > 0.45 ) color.a = 0.0;
+        gl_FragColor = color;
 
         bool s = dist < 0.0 && dist > -surface;
-        if (s) gl_FragColor = vec4(0, 0, 0, 0.0);
+        if (s) gl_FragColor = vec4(0, 0, 0, 1.0);
 
         float f_dist = texture(sdfTexFocus, vec2(uv.x, 1.0 - uv.y)).r - surface;
         if (f_dist > -surface && f_dist < 0.0 && dist < 0.0) gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
@@ -135,7 +138,49 @@ Promise.all([ loading1, loading2 ]).then((res) => {
   tick()
 })
 
-let focusGeometry = null
+const tifPTexture = new THREE.TextureLoader().load('tile.png', tick)
+tifPTexture.magFilter = THREE.NearestFilter
+tifPTexture.minFilter = THREE.LinearFilter
+
+const geometryP = new THREE.PlaneGeometry(2 * 0.1, 2 / (810/789) * 0.1, 1, 1)
+const materialP  = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+
+    uniforms: {
+      utifPTexture : { value: tifPTexture },
+      cmdata : { value: cmTexture },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = vec2(uv.x, 1.0 - uv.y);
+        // gl_Position = vec4(position, 1.0);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform sampler2D utifPTexture;
+      uniform sampler2D cmdata;
+
+      vec4 apply_colormap(float val) {
+        val = (val - 0.5) / (0.9 - 0.5);
+        return texture2D(cmdata, vec2(val, 0.5));
+      }
+
+      void main() {
+        float intensity = texture2D(utifPTexture, vUv).r;
+        vec4 color = apply_colormap(intensity);
+
+        gl_FragColor = color;
+        #include <colorspace_fragment>
+      }
+    `
+})
+
+const cardP = new THREE.Mesh(geometryP, materialP)
+cardP.position.set(0, 0, 0)
+scene.add(cardP)
 
 function updateFocusGeometry(clickID) {
   const q = { start: 0, end: 0, sID: null, vID: null }
