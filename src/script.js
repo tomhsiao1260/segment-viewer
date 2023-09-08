@@ -57,8 +57,8 @@ Promise.all([ loading1, loading2 ]).then((res) => {
   const [ sdfTex, bvh ] = sdfTexGenerate(clipGeometry)
   bvhh = bvh
 
-  const focusGeometry = updateFocusGeometry()
-  const [ sdfTexFocus, _ ] = sdfTexGenerate(focusGeometry)
+  // focusGeometry = updateFocusGeometry()
+  // const [ sdfTexFocus, _ ] = sdfTexGenerate(focusGeometry)
 
   const cmTexture = new THREE.TextureLoader().load(textureViridis)
   const tifTexture = new THREE.TextureLoader().load('00010.png', tick)
@@ -76,7 +76,7 @@ Promise.all([ loading1, loading2 ]).then((res) => {
       uAlpha : { value: 1 },
       surface : { value: 0.001 },
       sdfTex : { value: sdfTex.texture },
-      sdfTexFocus : { value: sdfTexFocus.texture },
+      sdfTexFocus : { value: null },
       volumeAspect : { value: 810 / 789 },
       screenAspect : { value: 2 / 2 },
       utifTexture : { value: tifTexture },
@@ -135,30 +135,40 @@ Promise.all([ loading1, loading2 ]).then((res) => {
   tick()
 })
 
-function updateFocusGeometry() {
+let focusGeometry = null
+
+function updateFocusGeometry(clickID) {
   const q = { start: 0, end: 0, sID: null, vID: null }
   const { chunkList } = clipGeometry.userData
   for (let i = 0; i < chunkList.length; i += 1) {
     const { id: sID } = chunkList[i]
-      if (i === 1) {
-        q.sID = sID
-        q.end = chunkList[i].maxIndex
-        q.start = (i === 0) ? 0 : chunkList[i - 1].maxIndex
-        break
-      }
+    if (sID === clickID) {
+      q.sID = sID
+      // q.vID = this.params.layers.select
+      q.end = chunkList[i].maxIndex
+      q.start = (i === 0) ? 0 : chunkList[i - 1].maxIndex
+      break
     }
+  }
 
-    const f_positions = clipGeometry.getAttribute('position').array.slice(q.start * 3, q.end * 3)
-    const f_normals = clipGeometry.getAttribute('normal').array.slice(q.start * 3, q.end * 3)
-    const f_uvs = clipGeometry.getAttribute('uv').array.slice(q.start * 2, q.end * 2)
+  if (!q.end && !focusGeometry) return
+  if (!q.end) { focusGeometry.dispose(); focusGeometry = null; return }
+  // return if current focus geometry already exist
+  const f = focusGeometry
+  // if (f && f.userData.sID === q.sID && f.userData.vID === q.vID) return
+  if (f && f.userData.sID === q.sID) return
 
-    const focusGeometry = new THREE.BufferGeometry()
-    focusGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
-    focusGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(f_uvs), 2))
-    focusGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(f_normals), 3))
-    focusGeometry.userData = q
+  const f_positions = clipGeometry.getAttribute('position').array.slice(q.start * 3, q.end * 3)
+  const f_normals = clipGeometry.getAttribute('normal').array.slice(q.start * 3, q.end * 3)
+  const f_uvs = clipGeometry.getAttribute('uv').array.slice(q.start * 2, q.end * 2)
 
-    return focusGeometry
+  const focusGeometry_ = new THREE.BufferGeometry()
+  focusGeometry_.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
+  focusGeometry_.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(f_uvs), 2))
+  focusGeometry_.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(f_normals), 3))
+  focusGeometry_.userData = q
+
+  return focusGeometry_
 }
 
 window.addEventListener('resize', () => {
@@ -195,7 +205,7 @@ function tick() {
 }
 
 function sdfTexGenerate(geometry) {
-  const nrrd = { w: 8100, h: 7890, d: 1 }
+  const nrrd = { w: 810, h: 789, d: 1 }
   const s = 1 / Math.max(nrrd.w, nrrd.h, nrrd.d)
 
   const matrix = new THREE.Matrix4()
@@ -282,12 +292,21 @@ function labeling() {
       labelDiv.style.top = (e.clientY + 20) + 'px'
       labelDiv.innerHTML = `${id}`
       // as well as this line
-      // tick()
+      updateViewer(id)
     }
   })
 }
 
 labeling()
+
+function updateViewer(clickID) {
+  const focusGeometry = updateFocusGeometry(clickID)
+  if (!focusGeometry) return
+  const [ sdfTexFocus, _ ] = sdfTexGenerate(focusGeometry)
+  card.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
+
+  tick()
+}
 
 
 
