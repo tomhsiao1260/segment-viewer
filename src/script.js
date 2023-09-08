@@ -7,40 +7,75 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { MapControls } from 'three/addons/controls/MapControls.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils'
 
 const sizes = {
   width: window.innerWidth,
   height: window.innerHeight
 }
 
+const obj_list = [ '20230505164332', '20230627122904' ]
 const canvas = document.querySelector('canvas.webgl')
 const scene = new THREE.Scene()
 const renderer = new THREE.WebGLRenderer({ canvas })
 renderer.setSize(sizes.width, sizes.height)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-let material
+let card, clipGeometry, bvhh
 
-const loading = new OBJLoader().loadAsync('20230627122904-layer-10.obj')
-loading.then((object) => {
-  const sdfGeometry = object.children[0].geometry
-  const [ sdfTex, bvh ] = sdfTexGenerate(sdfGeometry)
+const loading1 = new OBJLoader().loadAsync('20230505164332-layer-10.obj')
+const loading2 = new OBJLoader().loadAsync('20230627122904-layer-10.obj')
+
+Promise.all([ loading1, loading2 ]).then((res) => {
+  const sdfGeometry0 = res[0].children[0].geometry
+  const sdfGeometry1 = res[1].children[0].geometry
+
+  const c_positions = []
+  const c_normals = []
+  const c_uvs = []
+  const chunkList = []
+
+  res.forEach((group, i) => {
+    const positions = group.children[0].geometry.getAttribute('position').array
+    const normals = group.children[0].geometry.getAttribute('normal').array
+    const uvs = group.children[0].geometry.getAttribute('uv').array
+
+    c_positions.push(...positions)
+    c_uvs.push(...uvs)
+    c_normals.push(...normals)
+
+    chunkList.push({ id: obj_list[i], maxIndex: c_positions.length / 3 })
+  })
+
+  clipGeometry = new THREE.BufferGeometry()
+  clipGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c_positions), 3))
+  clipGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(c_uvs), 2))
+  clipGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(c_normals), 3))
+  clipGeometry.userData.chunkList = chunkList
+  // clipGeometry.userData.id = id
+
+  const [ sdfTex, bvh ] = sdfTexGenerate(clipGeometry)
+  bvhh = bvh
+
+  const focusGeometry = updateFocusGeometry()
+  const [ sdfTexFocus, _ ] = sdfTexGenerate(focusGeometry)
 
   const cmTexture = new THREE.TextureLoader().load(textureViridis)
   const tifTexture = new THREE.TextureLoader().load('00010.png', tick)
 
-  tifTexture.minFilter = THREE.LinearFilter
   tifTexture.magFilter = THREE.LinearFilter
+  tifTexture.minFilter = THREE.LinearMipmapLinearFilter
 
   const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
-  material = new THREE.ShaderMaterial({
+  const material = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
     uniforms: {
       uAlpha : { value: 1 },
       surface : { value: 0.001 },
       sdfTex : { value: sdfTex.texture },
+      sdfTexFocus : { value: sdfTexFocus.texture },
       volumeAspect : { value: 810 / 789 },
       screenAspect : { value: 2 / 2 },
-      // screenAspect : { value: sizes.width / sizes.height },
       utifTexture : { value: tifTexture },
       cmdata : { value: cmTexture },
     },
@@ -58,6 +93,7 @@ loading.then((object) => {
       uniform float volumeAspect;
       uniform float screenAspect;
       uniform sampler2D sdfTex;
+      uniform sampler2D sdfTexFocus;
       uniform sampler2D utifTexture;
       uniform sampler2D cmdata;
 
@@ -70,30 +106,93 @@ loading.then((object) => {
         float r = screenAspect / volumeAspect;
         float aspect = r;
 
-        vec2 vUv_;
-        vUv_ = vUv;
-        // vUv_.x = 0.2 * vUv.x + 0.4;
-        // vUv_.y = 0.2 * vUv.y + 0.4;
-
-        vec2 uv = vec2((vUv_.x - 0.5) * aspect, (vUv_.y - 0.5)) + vec2(0.5);
+        vec2 uv = vec2((vUv.x - 0.5), (vUv.y - 0.5) / aspect) + vec2(0.5);
         if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ) return;
 
-        float dist = texture2D(sdfTex, uv).r - surface;
-        // To Do: image y-axis & volume y-axis (inverse, but should be consistent)
-        float intensity = texture2D(utifTexture, vec2(uv.x, 1.0 - uv.y)).r;
+        float dist = texture2D(sdfTex, vec2(uv.x, 1.0 - uv.y)).r - surface;
+        float intensity = texture2D(utifTexture, uv).r;
 
         gl_FragColor = apply_colormap(intensity);
 
         bool s = dist < 0.0 && dist > -surface;
         if (s) gl_FragColor = vec4(0, 0, 0, 0.0);
 
+        float f_dist = texture(sdfTexFocus, vec2(uv.x, 1.0 - uv.y)).r - surface;
+        if (f_dist > -surface && f_dist < 0.0 && dist < 0.0) gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+
         #include <colorspace_fragment>
       }
     `,
   })
-  scene.add(new THREE.Mesh(geometry, material))
+
+  card = new THREE.Mesh(geometry, material)
+  card.userData = { w: 2, h: 2, vw: 810, vh: 789, center: new THREE.Vector3() }
+  scene.add(card)
 
   tick()
+})
+
+function updateFocusGeometry() {
+  const q = { start: 0, end: 0, sID: null, vID: null }
+  const { chunkList } = clipGeometry.userData
+  for (let i = 0; i < chunkList.length; i += 1) {
+    const { id: sID } = chunkList[i]
+      if (i === 1) {
+        q.sID = sID
+        q.end = chunkList[i].maxIndex
+        q.start = (i === 0) ? 0 : chunkList[i - 1].maxIndex
+        break
+      }
+    }
+
+    const f_positions = clipGeometry.getAttribute('position').array.slice(q.start * 3, q.end * 3)
+    const f_normals = clipGeometry.getAttribute('normal').array.slice(q.start * 3, q.end * 3)
+    const f_uvs = clipGeometry.getAttribute('uv').array.slice(q.start * 2, q.end * 2)
+
+    const focusGeometry = new THREE.BufferGeometry()
+    focusGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
+    focusGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(f_uvs), 2))
+    focusGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(f_normals), 3))
+    focusGeometry.userData = q
+
+    return focusGeometry
+}
+
+window.addEventListener('mousedown', (e) => {
+  const mouse = new THREE.Vector2()
+  mouse.x = e.clientX / sizes.width * 2 - 1
+  mouse.y = -(e.clientY / sizes.height) * 2 + 1
+
+  const raycaster = new THREE.Raycaster()
+  raycaster.setFromCamera(mouse, camera)
+  const intersects = raycaster.intersectObjects([ card ])
+
+  if (!intersects.length) return
+
+  const p = intersects[0].point
+  const c = intersects[0].object.userData
+
+  const point = new THREE.Vector3()
+  point.x = (p.x - c.center.x) / (c.w / 2) / 2
+  point.y = (p.y - c.center.y) / (c.h / 2) / 2
+  point.z = 0
+
+  const target = bvhh.closestPointToPoint(point, {}, 0, 0.02)
+  if (!target) return
+
+  const { chunkList } = bvhh.geometry.userData
+  const hitIndex = bvhh.geometry.index.array[target.faceIndex * 3]
+
+  for (let i = 0; i < chunkList.length; i ++) {
+    const { id: sID, maxIndex } = chunkList[i]
+    if (maxIndex > hitIndex) {
+      console.log(sID)
+      break
+      // for (const sID in this.segmentList) { this.segmentList[sID].focus = false }
+      // this.segmentList[sID].focus = true
+      // return this.segmentList[sID]
+    }
+  }
 })
 
 window.addEventListener('resize', () => {
@@ -112,8 +211,9 @@ window.addEventListener('resize', () => {
   tick()
 })
 
-const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100)
-camera.position.z = 1.3
+const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.01, 100)
+camera.up.set(0, -1, 0)
+camera.position.z = -1.3
 scene.add(camera)
 
 const controls = new OrbitControls(camera, canvas)
