@@ -62,9 +62,12 @@ Promise.all([ loading1, loading2 ]).then((res) => {
 
   const cmTexture = new THREE.TextureLoader().load(textureViridis)
   const tifTexture = new THREE.TextureLoader().load('00010.png', tick)
+  cmTexture.minFilter = THREE.NearestFilter
+  cmTexture.magFilter = THREE.NearestFilter
 
-  tifTexture.magFilter = THREE.LinearFilter
-  tifTexture.minFilter = THREE.LinearMipmapLinearFilter
+  tifTexture.magFilter = THREE.NearestFilter
+  // tifTexture.magFilter = THREE.LinearFilter
+  tifTexture.minFilter = THREE.LinearFilter
 
   const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
   const material = new THREE.ShaderMaterial({
@@ -158,43 +161,6 @@ function updateFocusGeometry() {
     return focusGeometry
 }
 
-window.addEventListener('mousedown', (e) => {
-  const mouse = new THREE.Vector2()
-  mouse.x = e.clientX / sizes.width * 2 - 1
-  mouse.y = -(e.clientY / sizes.height) * 2 + 1
-
-  const raycaster = new THREE.Raycaster()
-  raycaster.setFromCamera(mouse, camera)
-  const intersects = raycaster.intersectObjects([ card ])
-
-  if (!intersects.length) return
-
-  const p = intersects[0].point
-  const c = intersects[0].object.userData
-
-  const point = new THREE.Vector3()
-  point.x = (p.x - c.center.x) / (c.w / 2) / 2
-  point.y = (p.y - c.center.y) / (c.h / 2) / 2
-  point.z = 0
-
-  const target = bvhh.closestPointToPoint(point, {}, 0, 0.02)
-  if (!target) return
-
-  const { chunkList } = bvhh.geometry.userData
-  const hitIndex = bvhh.geometry.index.array[target.faceIndex * 3]
-
-  for (let i = 0; i < chunkList.length; i ++) {
-    const { id: sID, maxIndex } = chunkList[i]
-    if (maxIndex > hitIndex) {
-      console.log(sID)
-      break
-      // for (const sID in this.segmentList) { this.segmentList[sID].focus = false }
-      // this.segmentList[sID].focus = true
-      // return this.segmentList[sID]
-    }
-  }
-})
-
 window.addEventListener('resize', () => {
   // Update sizes
   sizes.width = window.innerWidth
@@ -229,7 +195,7 @@ function tick() {
 }
 
 function sdfTexGenerate(geometry) {
-  const nrrd = { w: 810, h: 789, d: 1 }
+  const nrrd = { w: 8100, h: 7890, d: 1 }
   const s = 1 / Math.max(nrrd.w, nrrd.h, nrrd.d)
 
   const matrix = new THREE.Matrix4()
@@ -257,4 +223,71 @@ function sdfTexGenerate(geometry) {
 
   return [ sdfTex, bvh ]
 }
+
+function getLabel(mouse) {
+  const raycaster = new THREE.Raycaster()
+  raycaster.setFromCamera(mouse, camera)
+  const intersects = raycaster.intersectObjects([ card ])
+
+  if (!intersects.length) return
+
+  const p = intersects[0].point
+  const c = intersects[0].object.userData
+
+  const point = new THREE.Vector3()
+  point.x = (p.x - c.center.x) / (c.w / 2) / 2
+  point.y = (p.y - c.center.y) / (c.h / 2) / 2
+  point.z = 0
+
+  const target = bvhh.closestPointToPoint(point, {}, 0, 0.02)
+  if (!target) return
+
+  const { chunkList } = bvhh.geometry.userData
+  const hitIndex = bvhh.geometry.index.array[target.faceIndex * 3]
+
+  for (let i = 0; i < chunkList.length; i ++) {
+    const { id: sID, maxIndex } = chunkList[i]
+    if (maxIndex > hitIndex) {
+      return { id: sID }
+    }
+  }
+}
+
+// segment labeling
+function labeling() {
+  const mouse = new THREE.Vector2()
+  const labelDiv = document.createElement('div')
+  labelDiv.id = 'label'
+  document.body.appendChild(labelDiv)
+
+  window.addEventListener('mousedown', (e) => {
+    if (!(e.target instanceof HTMLCanvasElement)) return
+    mouse.x = e.clientX / window.innerWidth * 2 - 1
+    mouse.y = - (e.clientY / window.innerHeight) * 2 + 1
+
+    // const { mode } = viewer.params
+    labelDiv.style.display = 'none'
+
+    // const loadingDiv = document.querySelector('#loading')
+    // if (loadingDiv.style.display === 'inline') return
+
+    if (true) {
+      // only this line is important
+      const sTarget = getLabel(mouse)
+      if (!sTarget) { return }
+
+      const { id, clip } = sTarget
+      labelDiv.style.display = 'inline'
+      labelDiv.style.left = (e.clientX + 20) + 'px'
+      labelDiv.style.top = (e.clientY + 20) + 'px'
+      labelDiv.innerHTML = `${id}`
+      // as well as this line
+      // tick()
+    }
+  })
+}
+
+labeling()
+
+
 
