@@ -1,4 +1,5 @@
 {
-  "TIF_INPUT": "../full-scrolls/Scroll1.volpkg/volumes/20230205180739",
   "OBJ_INPUT": "../full-scrolls/Scroll1.volpkg/paths",
+  "TIF_INPUT": "../full-scrolls/Scroll1.volpkg/volumes/20230205180739",
+  "TIF_SMALL_INPUT": "../full-scrolls/Scroll1.volpkg/volumes_small/20230205180739"
 }
