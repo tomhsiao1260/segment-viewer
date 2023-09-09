@@ -1,7 +1,8 @@
-.DS_Store
-node_modules
-dist
-public
+*.DS_Store
+*.nrrd
+*.npz
 
-/static/*
-!/static/.gitkeep
+env/
+output/
+__pycache__/
+
