@@ -7,6 +7,7 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { MapControls } from 'three/addons/controls/MapControls.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min'
 
 const sizes = {
   width: window.innerWidth,
@@ -20,7 +21,7 @@ const renderer = new THREE.WebGLRenderer({ canvas })
 renderer.setSize(sizes.width, sizes.height)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-let card, clipGeometry, focusGeometry, bvhh
+let card, cardS, clipGeometry, focusGeometry, bvhh
 
 const loading1 = new OBJLoader().loadAsync('20230505164332-layer-10.obj')
 const loading2 = new OBJLoader().loadAsync('20230627122904-layer-10.obj')
@@ -63,9 +64,6 @@ Promise.all([ loading1, loading2 ]).then((res) => {
   const [ sdfTex, bvh ] = sdfTexGenerate(clipGeometry)
   bvhh = bvh
 
-  // focusGeometry = updateFocusGeometry()
-  // const [ sdfTexFocus, _ ] = sdfTexGenerate(focusGeometry)
-
   const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
   const material = new THREE.ShaderMaterial({
     transparent: true,
@@ -73,9 +71,6 @@ Promise.all([ loading1, loading2 ]).then((res) => {
 
     uniforms: {
       uAlpha : { value: 1 },
-      surface : { value: 0.001 },
-      sdfTex : { value: sdfTex.texture },
-      sdfTexFocus : { value: null },
       volumeAspect : { value: 810 / 789 },
       screenAspect : { value: 2 / 2 },
       utifTexture : { value: tifTexture },
@@ -91,11 +86,8 @@ Promise.all([ loading1, loading2 ]).then((res) => {
     `,
     fragmentShader: `
       varying vec2 vUv;
-      uniform float surface;
       uniform float volumeAspect;
       uniform float screenAspect;
-      uniform sampler2D sdfTex;
-      uniform sampler2D sdfTexFocus;
       uniform sampler2D utifTexture;
       uniform sampler2D cmdata;
 
@@ -111,19 +103,8 @@ Promise.all([ loading1, loading2 ]).then((res) => {
         vec2 uv = vec2((vUv.x - 0.5), (vUv.y - 0.5) / aspect) + vec2(0.5);
         if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ) return;
 
-        float dist = texture2D(sdfTex, vec2(uv.x, 1.0 - uv.y)).r - surface;
         float intensity = texture2D(utifTexture, uv).r;
-
-        vec4 color = apply_colormap(intensity);
-        color.a = 0.9;
-        if ( uv.x < 0.55 && uv.x > 0.45 && uv.y < 0.55 && uv.y > 0.45 ) color.a = 0.0;
-        gl_FragColor = color;
-
-        bool s = dist < 0.0 && dist > -surface;
-        if (s) gl_FragColor = vec4(0, 0, 0, 1.0);
-
-        float f_dist = texture(sdfTexFocus, vec2(uv.x, 1.0 - uv.y)).r - surface;
-        if (f_dist > -surface + 1e-6 && f_dist < 0.0 && dist < 0.0) gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+        gl_FragColor = apply_colormap(intensity);
 
         #include <colorspace_fragment>
       }
@@ -134,52 +115,135 @@ Promise.all([ loading1, loading2 ]).then((res) => {
   card.userData = { w: 2, h: 2, vw: 810, vh: 789, center: new THREE.Vector3() }
   scene.add(card)
 
-  tick()
-})
-
-const tifPTexture = new THREE.TextureLoader().load('volume/00000/cell_yxz_000_000_00000.png', tick)
-tifPTexture.magFilter = THREE.NearestFilter
-tifPTexture.minFilter = THREE.LinearFilter
-
-const geometryP = new THREE.PlaneGeometry(2 * 0.1, 2 / (810/789) * 0.1, 1, 1)
-const materialP  = new THREE.ShaderMaterial({
+  const geometryS = new THREE.PlaneGeometry(2, 2, 1, 1)
+  const materialS = new THREE.ShaderMaterial({
+    transparent: true,
     side: THREE.BackSide,
 
     uniforms: {
-      utifPTexture : { value: tifPTexture },
-      cmdata : { value: cmTexture },
+      surface : { value: 0.001 },
+      sdfTex : { value: sdfTex.texture },
+      sdfTexFocus : { value: null },
+      volumeAspect : { value: 810 / 789 },
+      screenAspect : { value: 2 / 2 },
     },
     vertexShader: `
       varying vec2 vUv;
       void main() {
         vUv = vec2(uv.x, 1.0 - uv.y);
-        // gl_Position = vec4(position, 1.0);
         gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
       }
     `,
     fragmentShader: `
       varying vec2 vUv;
-      uniform sampler2D utifPTexture;
-      uniform sampler2D cmdata;
-
-      vec4 apply_colormap(float val) {
-        val = (val - 0.5) / (0.9 - 0.5);
-        return texture2D(cmdata, vec2(val, 0.5));
-      }
+      uniform float surface;
+      uniform float volumeAspect;
+      uniform float screenAspect;
+      uniform sampler2D sdfTex;
+      uniform sampler2D sdfTexFocus;
 
       void main() {
-        float intensity = texture2D(utifPTexture, vUv).r;
-        vec4 color = apply_colormap(intensity);
+        float r = screenAspect / volumeAspect;
+        float aspect = r;
 
-        gl_FragColor = color;
-        #include <colorspace_fragment>
+        vec2 uv = vec2((vUv.x - 0.5), (vUv.y - 0.5) / aspect) + vec2(0.5);
+        if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ) return;
+
+        gl_FragColor = vec4(0.0);
+
+        float dist = texture2D(sdfTex, vec2(uv.x, 1.0 - uv.y)).r - surface;
+        bool s = dist < 0.0 && dist > -surface;
+        if (s) gl_FragColor = vec4(0, 0, 0, 1.0);
+
+        float f_dist = texture(sdfTexFocus, vec2(uv.x, 1.0 - uv.y)).r - surface;
+        if (f_dist > -surface + 1e-6 && f_dist < 0.0 && dist < 0.0) gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
       }
-    `
+    `,
+  })
+
+  cardS = new THREE.Mesh(geometryS, materialS)
+  cardS.position.set(0, 0, -0.7)
+  scene.add(cardS)
+
+  tick()
 })
 
-const cardP = new THREE.Mesh(geometryP, materialP)
-cardP.position.set(0, 0, 0.5)
-scene.add(cardP)
+const geometryP = new THREE.PlaneGeometry(2 * (809/8096), 2 * (788/8096), 1, 1)
+const meta = fetch('volume/meta.json').then((res) => res.json())
+
+const gui = new GUI()
+gui.add({ enhance: generateTile }, 'enhance')
+
+function generateTile() {
+  const mouse = new THREE.Vector2()
+  const raycaster = new THREE.Raycaster()
+  raycaster.setFromCamera(mouse, camera)
+  const intersects = raycaster.intersectObjects([ card ])
+
+  if (!intersects.length) return
+
+  const p = intersects[0].point
+  const c = intersects[0].object.userData
+
+  // 0~9
+  const idx = Math.floor(10 * (p.x - c.center.x + 1) / 2)
+  const idy = Math.floor(10 * (p.y - c.center.y + 1) / 2)
+  const tifPTexture = new THREE.TextureLoader().loadAsync(`volume/00000/cell_yxz_00${idy}_00${idx}_00000.png`)
+
+  Promise.all([ meta, tifPTexture ]).then((res) => {
+    const [ meta, texture ] = res
+    const { id, clip, subclip } = meta.volume[0]
+
+    texture.magFilter = THREE.NearestFilter
+    texture.minFilter = THREE.LinearFilter
+
+    const x = c.center.x - c.w / 2 * 1.0 + (idx + 0.5) * geometryP.parameters.width
+    const y = c.center.y - c.h / 2 * (c.vh / c.vw) + (idy + 0.5) * geometryP.parameters.height
+
+    const materialP  = new THREE.ShaderMaterial({
+      transparent: true,
+      side: THREE.BackSide,
+
+      uniforms: {
+        utifPTexture : { value: null },
+        cmdata : { value: cmTexture },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = vec2(uv.x, 1.0 - uv.y);
+          // gl_Position = vec4(position, 1.0);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform sampler2D utifPTexture;
+        uniform sampler2D cmdata;
+
+        vec4 apply_colormap(float val) {
+          val = (val - 0.5) / (0.9 - 0.5);
+          return texture2D(cmdata, vec2(val, 0.5));
+        }
+
+        void main() {
+          float intensity = texture2D(utifPTexture, vUv).r;
+          vec4 color = apply_colormap(intensity);
+          // color.a = 0.5;
+
+          gl_FragColor = color;
+          #include <colorspace_fragment>
+        }
+      `
+    })
+    const cardP = new THREE.Mesh(geometryP, materialP)
+    cardP.position.set(x, y, -0.5)
+    scene.add(cardP)
+
+    cardP.material.uniforms.utifPTexture.value = texture
+    tick()
+  })
+}
 
 function updateFocusGeometry(clickID) {
   const q = { start: 0, end: 0, sID: null, vID: null }
@@ -353,7 +417,7 @@ function updateViewer(clickID) {
   const focusGeometry = updateFocusGeometry(clickID)
   if (!focusGeometry) return
   const [ sdfTexFocus, _ ] = sdfTexGenerate(focusGeometry)
-  card.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
+  cardS.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
 
   tick()
 }
