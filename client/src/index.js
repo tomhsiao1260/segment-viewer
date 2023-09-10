@@ -26,7 +26,7 @@ const loading1 = new OBJLoader().loadAsync('20230505164332-layer-10.obj')
 const loading2 = new OBJLoader().loadAsync('20230627122904-layer-10.obj')
 
 const cmTexture = new THREE.TextureLoader().load(textureViridis)
-const tifTexture = new THREE.TextureLoader().load('00010.png', tick)
+const tifTexture = new THREE.TextureLoader().load('volume/00000.png', tick)
 cmTexture.minFilter = THREE.NearestFilter
 cmTexture.magFilter = THREE.NearestFilter
 tifTexture.magFilter = THREE.NearestFilter
@@ -55,8 +55,8 @@ Promise.all([ loading1, loading2 ]).then((res) => {
 
   clipGeometry = new THREE.BufferGeometry()
   clipGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c_positions), 3))
-  clipGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(c_uvs), 2))
-  clipGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(c_normals), 3))
+  // clipGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(c_uvs), 2))
+  // clipGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(c_normals), 3))
   clipGeometry.userData.chunkList = chunkList
   // clipGeometry.userData.id = id
 
@@ -123,7 +123,7 @@ Promise.all([ loading1, loading2 ]).then((res) => {
         if (s) gl_FragColor = vec4(0, 0, 0, 1.0);
 
         float f_dist = texture(sdfTexFocus, vec2(uv.x, 1.0 - uv.y)).r - surface;
-        if (f_dist > -surface && f_dist < 0.0 && dist < 0.0) gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+        if (f_dist > -surface + 1e-6 && f_dist < 0.0 && dist < 0.0) gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
 
         #include <colorspace_fragment>
       }
@@ -137,7 +137,7 @@ Promise.all([ loading1, loading2 ]).then((res) => {
   tick()
 })
 
-const tifPTexture = new THREE.TextureLoader().load('tile.png', tick)
+const tifPTexture = new THREE.TextureLoader().load('volume/00000/cell_yxz_000_000_00000.png', tick)
 tifPTexture.magFilter = THREE.NearestFilter
 tifPTexture.minFilter = THREE.LinearFilter
 
@@ -178,7 +178,7 @@ const materialP  = new THREE.ShaderMaterial({
 })
 
 const cardP = new THREE.Mesh(geometryP, materialP)
-cardP.position.set(0, 0, 0)
+cardP.position.set(0, 0, 0.5)
 scene.add(cardP)
 
 function updateFocusGeometry(clickID) {
@@ -203,13 +203,13 @@ function updateFocusGeometry(clickID) {
   if (f && f.userData.sID === q.sID) return
 
   const f_positions = clipGeometry.getAttribute('position').array.slice(q.start * 3, q.end * 3)
-  const f_normals = clipGeometry.getAttribute('normal').array.slice(q.start * 3, q.end * 3)
-  const f_uvs = clipGeometry.getAttribute('uv').array.slice(q.start * 2, q.end * 2)
+  // const f_normals = clipGeometry.getAttribute('normal').array.slice(q.start * 3, q.end * 3)
+  // const f_uvs = clipGeometry.getAttribute('uv').array.slice(q.start * 2, q.end * 2)
 
   const focusGeometry_ = new THREE.BufferGeometry()
   focusGeometry_.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
-  focusGeometry_.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(f_uvs), 2))
-  focusGeometry_.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(f_normals), 3))
+  // focusGeometry_.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(f_uvs), 2))
+  // focusGeometry_.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(f_normals), 3))
   focusGeometry_.userData = q
 
   return focusGeometry_
@@ -221,7 +221,12 @@ window.addEventListener('resize', () => {
   sizes.height = window.innerHeight
 
   // Update camera
-  camera.aspect = sizes.width / sizes.height
+  // camera.aspect = sizes.width / sizes.height
+  camera.left = -1 * sizes.width / sizes.height
+  camera.right = 1 * sizes.width / sizes.height
+  camera.top = 1
+  camera.bottom = -1
+
   camera.updateProjectionMatrix()
 
   // Update renderer
@@ -231,7 +236,8 @@ window.addEventListener('resize', () => {
   tick()
 })
 
-const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.01, 100)
+// const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.01, 100)
+const camera = new THREE.OrthographicCamera(-1 * sizes.width / sizes.height, 1 * sizes.width / sizes.height, 1, -1, 0.01, 100)
 camera.up.set(0, -1, 0)
 camera.position.z = -1.3
 scene.add(camera)
