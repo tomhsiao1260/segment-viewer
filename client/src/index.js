@@ -121,7 +121,7 @@ Promise.all([ loading1, loading2 ]).then((res) => {
     side: THREE.BackSide,
 
     uniforms: {
-      surface : { value: 0.001 },
+      surface : { value: 0.0003 },
       sdfTex : { value: sdfTex.texture },
       sdfTexFocus : { value: null },
       volumeAspect : { value: 810 / 789 },
