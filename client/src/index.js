@@ -14,7 +14,11 @@ const sizes = {
   height: window.innerHeight
 }
 
-const obj_list = [ '20230505164332', '20230627122904' ]
+const gui = new GUI()
+gui.add({ enhance: generateTile }, 'enhance')
+
+// const obj_list = [ '20230505164332', '20230627122904', '20230506133355' ]
+const obj_list = [ '20230505164332', '20230627122904', '20230505175240', '20230506133355' ]
 const canvas = document.querySelector('canvas.webgl')
 const scene = new THREE.Scene()
 const renderer = new THREE.WebGLRenderer({ canvas })
@@ -23,9 +27,6 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
 let card, cardS, clipGeometry, focusGeometry, bvhh
 
-const loading1 = new OBJLoader().loadAsync('20230505164332-layer-10.obj')
-const loading2 = new OBJLoader().loadAsync('20230627122904-layer-10.obj')
-
 const cmTexture = new THREE.TextureLoader().load(textureViridis)
 const tifTexture = new THREE.TextureLoader().load('volume/00000.png', tick)
 cmTexture.minFilter = THREE.NearestFilter
@@ -33,31 +34,25 @@ cmTexture.magFilter = THREE.NearestFilter
 tifTexture.magFilter = THREE.NearestFilter
 tifTexture.minFilter = THREE.LinearFilter
 
-Promise.all([ loading1, loading2 ]).then((res) => {
-  const sdfGeometry0 = res[0].children[0].geometry
-  const sdfGeometry1 = res[1].children[0].geometry
+const promiseList = []
 
+obj_list.forEach((id) => {
+  const loading = new OBJLoader().loadAsync(`segment/00000/${id}_00000_points.obj`)
+  promiseList.push(loading)
+})
+
+Promise.all(promiseList).then((res) => {
   const c_positions = []
-  const c_normals = []
-  const c_uvs = []
   const chunkList = []
 
   res.forEach((group, i) => {
     const positions = group.children[0].geometry.getAttribute('position').array
-    const normals = group.children[0].geometry.getAttribute('normal').array
-    const uvs = group.children[0].geometry.getAttribute('uv').array
-
     c_positions.push(...positions)
-    c_uvs.push(...uvs)
-    c_normals.push(...normals)
-
     chunkList.push({ id: obj_list[i], maxIndex: c_positions.length / 3 })
   })
 
   clipGeometry = new THREE.BufferGeometry()
   clipGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c_positions), 3))
-  // clipGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(c_uvs), 2))
-  // clipGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(c_normals), 3))
   clipGeometry.userData.chunkList = chunkList
   // clipGeometry.userData.id = id
 
@@ -121,7 +116,7 @@ Promise.all([ loading1, loading2 ]).then((res) => {
     side: THREE.BackSide,
 
     uniforms: {
-      surface : { value: 0.0003 },
+      surface : { value: 10.0 },
       sdfTex : { value: sdfTex.texture },
       sdfTexFocus : { value: null },
       volumeAspect : { value: 810 / 789 },
@@ -165,14 +160,13 @@ Promise.all([ loading1, loading2 ]).then((res) => {
   cardS.position.set(0, 0, -0.7)
   scene.add(cardS)
 
+  gui.add(materialS.uniforms.surface, 'value', 0, 10.0).name('surface').onChange(tick)
+
   tick()
 })
 
 const geometryP = new THREE.PlaneGeometry(2 * (809/8096), 2 * (788/8096), 1, 1)
 const meta = fetch('volume/meta.json').then((res) => res.json())
-
-const gui = new GUI()
-gui.add({ enhance: generateTile }, 'enhance')
 
 function generateTile() {
   const mouse = new THREE.Vector2()
@@ -267,13 +261,9 @@ function updateFocusGeometry(clickID) {
   if (f && f.userData.sID === q.sID) return
 
   const f_positions = clipGeometry.getAttribute('position').array.slice(q.start * 3, q.end * 3)
-  // const f_normals = clipGeometry.getAttribute('normal').array.slice(q.start * 3, q.end * 3)
-  // const f_uvs = clipGeometry.getAttribute('uv').array.slice(q.start * 2, q.end * 2)
 
   const focusGeometry_ = new THREE.BufferGeometry()
   focusGeometry_.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
-  // focusGeometry_.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(f_uvs), 2))
-  // focusGeometry_.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(f_normals), 3))
   focusGeometry_.userData = q
 
   return focusGeometry_
@@ -323,11 +313,12 @@ function sdfTexGenerate(geometry) {
   const s = 1 / Math.max(nrrd.w, nrrd.h, nrrd.d)
 
   const matrix = new THREE.Matrix4()
-  const center = new THREE.Vector3()
+  // const center = new THREE.Vector3()
+  const center = new THREE.Vector3(8096/2, 7888/2, 0)
   const quat = new THREE.Quaternion()
   const scaling = new THREE.Vector3()
 
-  scaling.set(nrrd.w * s, nrrd.h * s, nrrd.d * s)
+  scaling.set(8096, 7888, 10)
   matrix.compose(center, quat, scaling)
 
   const bvh = new MeshBVH(geometry, { maxLeafTris: 1 })
@@ -336,6 +327,7 @@ function sdfTexGenerate(geometry) {
   generateSdfPass.material.uniforms.matrix.value.copy(matrix)
   generateSdfPass.material.uniforms.zValue.value = 0.5
 
+  // const sdfTex = new THREE.WebGLRenderTarget(nrrd.w * 10, nrrd.h * 10)
   const sdfTex = new THREE.WebGLRenderTarget(nrrd.w, nrrd.h)
   sdfTex.texture.format = THREE.RedFormat
   sdfTex.texture.type = THREE.FloatType
@@ -359,11 +351,14 @@ function getLabel(mouse) {
   const c = intersects[0].object.userData
 
   const point = new THREE.Vector3()
-  point.x = (p.x - c.center.x) / (c.w / 2) / 2
-  point.y = (p.y - c.center.y) / (c.h / 2) / 2
+  point.x = (p.x - c.center.x) / (c.w / 2) / 2 + 0.5
+  point.y = (p.y - c.center.y) / (c.h / 2) / 2 * (810 / 789) + 0.5
   point.z = 0
 
-  const target = bvhh.closestPointToPoint(point, {}, 0, 0.02)
+  point.x *= 8096
+  point.y *= 7888
+
+  const target = bvhh.closestPointToPoint(point, {}, 0, 100)
   if (!target) return
 
   const { chunkList } = bvhh.geometry.userData

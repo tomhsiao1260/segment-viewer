@@ -73,13 +73,16 @@ def cal_bounding_box(data):
 
     # calculate bounding box
     mean_vertices = np.mean(vertices, axis=0)
-    max_x = np.max(np.abs(vertices[:, 0] - mean_vertices[0]))
-    max_y = np.max(np.abs(vertices[:, 1] - mean_vertices[1]))
-    max_z = np.max(np.abs(vertices[:, 2] - mean_vertices[2]))
+    min_x = np.min(vertices[:, 0])
+    min_y = np.min(vertices[:, 1])
+    min_z = np.min(vertices[:, 2])
+    max_x = np.max(vertices[:, 0])
+    max_y = np.max(vertices[:, 1])
+    max_z = np.max(vertices[:, 2])
 
     bounding_box = {}
-    bounding_box['min'] = mean_vertices - np.array([max_x, max_y, max_z])
-    bounding_box['max'] = mean_vertices + np.array([max_x, max_y, max_z])
+    bounding_box['min'] = np.array([min_x, min_y, min_z])
+    bounding_box['max'] = np.array([max_x, max_y, max_z])
 
     # translate & rescale
     p_vertices = vertices
@@ -96,10 +99,15 @@ def cal_bounding_box(data):
 
     return p_data
 
-def clip_obj(data, l, g):
+def clip_obj(data, layer):
     vertices = data.get('vertices', np.array([]))
 
-    p_vertices = vertices[(vertices[:, 2] >= (l-g)) & (vertices[:, 2] <= (l+g))]
+    # select
+    p_vertices = vertices[(vertices[:, 2] >= (layer-1e-7)) & (vertices[:, 2] <= (layer+1e-7))]
+
+    # vertices number must be a multiple of 3 (three.js bvh issue)
+    n = p_vertices.shape[0]
+    p_vertices = p_vertices[:(n - (n % 3)), :]
 
     p_data = {}
     p_data['vertices'] = p_vertices
@@ -108,7 +116,7 @@ def clip_obj(data, l, g):
 
 gap = 5
 layer = 0
-SEGMENT_LIST = [ '20230505164332', '20230627122904' ]
+SEGMENT_LIST = [ '20230505164332', '20230627122904', '20230505175240', '20230506133355', '20230510153843', '20230626140105' ]
 LAYER_FOLDER = f'{layer:05d}'
 
 # clear .obj output folder
@@ -120,7 +128,7 @@ meta = {}
 meta['segment'] = []
 
 for SEGMENT_ID in SEGMENT_LIST:
-    filename = os.path.join(os.path.join(OBJ_INPUT, SEGMENT_ID, f'{SEGMENT_ID}.obj'))
+    filename = os.path.join(os.path.join(OBJ_INPUT, SEGMENT_ID, f'{SEGMENT_ID}_points.obj'))
 
     data = parse_obj(filename)
     p_data = cal_bounding_box(data)
@@ -144,9 +152,13 @@ for SEGMENT_ID in SEGMENT_LIST:
 
     if (int(c[2]) - gap >= layer or int(b[2]) + gap <= layer): continue
 
+    selected_layer = layer
+    if (int(c[2]) > layer): selected_layer = int(c[2])
+    if (int(b[2]) < layer): selected_layer = int(b[2])
+
     filename = os.path.join(os.path.join(OBJ_INPUT, SEGMENT_ID, f'{SEGMENT_ID}_points.obj'))
     data = parse_obj(filename)
-    p_data = clip_obj(data, layer, gap)
+    p_data = clip_obj(data, selected_layer)
     save_obj(os.path.join(OBJ_OUTPUT, LAYER_FOLDER, f'{SEGMENT_ID}_{LAYER_FOLDER}_points.obj'), p_data)
 
 with open(OBJ_INFO, "w") as outfile:
