@@ -1,32 +1,20 @@
+import os
 import json
+import shutil
 import numpy as np
-from PIL import Image
 
-# 0 ~ 5
-obj_list = []
-# obj_list.append('20230503225234')
-# obj_list.append('20230505175240')
-obj_list.append('20230505164332')
-# obj_list.append('20230506133355')
-# obj_list.append('20230507172452')
-# obj_list.append('20230508164013')
-# obj_list.append('20230511085916')
-# obj_list.append('20230513092954')
-# obj_list.append('20230513095916')
-# obj_list.append('20230524092434')
-# obj_list.append('20230510170242')
-# obj_list.append('20230508220213')
-# obj_list.append('20230507175928')
-# obj_list.append('20230511201612')
-# obj_list.append('20230624160816')
-obj_list.append('20230627122904')
-# obj_list.append('20230520132429')
-# obj_list.append('20230626151618')
-# obj_list.append('20230505093556')
-# obj_list.append('20230504125349')
-# obj_list.append('20230510153843')
-# obj_list.append('20230626140105')
-# obj_list.append('20230624144604')
+if not os.path.exists('config.json'):
+    print('config.json not found')
+    exit()
+
+# config & path
+with open('config.json') as f:
+    config = json.load(f)
+
+OBJ_INPUT = config['OBJ_INPUT']
+
+OBJ_OUTPUT = './output/segment'
+OBJ_INFO   = './output/segment/meta.json'
 
 def parse_obj(filename):
     vertices = []
@@ -55,10 +43,10 @@ def parse_obj(filename):
     return data
 
 def save_obj(filename, data):
-    vertices = data['vertices']
-    normals  = data['normals']
-    uvs      = data['uvs']
-    faces    = data['faces']
+    vertices = data.get('vertices', np.array([]))
+    normals  = data.get('normals' , np.array([]))
+    uvs      = data.get('uvs'     , np.array([]))
+    faces    = data.get('faces'   , np.array([]))
 
     with open(filename, 'w') as f:
 
@@ -77,54 +65,95 @@ def save_obj(filename, data):
             indices = ' '.join(['/'.join(map(str, vertex)) for vertex in face])
             f.write(f"f {indices}\n")
 
-layer = 10
-shape = { 'w': 810, 'h': 789, 'd': 1 }
-clip = { 'x': 0, 'y': 0, 'z': layer - 5, 'w': 8096, 'h': 7888, 'd': 5 + 5 }
+def cal_bounding_box(data):
+    vertices = data.get('vertices', np.array([]))
+    normals  = data.get('normals' , np.array([]))
+    uvs      = data.get('uvs'     , np.array([]))
+    faces    = data.get('faces'   , np.array([]))
 
-bounding_box = {}
-bounding_box['min'] = np.array([clip['x'], clip['y'], clip['z']])
-bounding_box['max'] = np.array([clip['x'] + clip['w'], clip['y'] + clip['h'], clip['z'] + clip['d']])
+    # calculate bounding box
+    mean_vertices = np.mean(vertices, axis=0)
+    max_x = np.max(np.abs(vertices[:, 0] - mean_vertices[0]))
+    max_y = np.max(np.abs(vertices[:, 1] - mean_vertices[1]))
+    max_z = np.max(np.abs(vertices[:, 2] - mean_vertices[2]))
 
-# cropping each segmentation (only remain the regoin in bounding box)
-for name in obj_list:
-    filename = 'segment/' + name + '.obj'
-    data = parse_obj(filename)
+    bounding_box = {}
+    bounding_box['min'] = mean_vertices - np.array([max_x, max_y, max_z])
+    bounding_box['max'] = mean_vertices + np.array([max_x, max_y, max_z])
 
-    # faces recalculation (tricky)
-    inbox_verties = np.all((bounding_box['min'] <= data['vertices']) & (data['vertices'] <= bounding_box['max']), axis=1)
-    inbox_faces = np.any(inbox_vertices[data['faces'][:, :, 0].astype(int) - 1], axis=1)
-
-    flatten = data['faces'][inbox_faces].astype(int)[:, :, 0].reshape(-1)
-    inbox_vertices[np.array(flatten, dtype=int) - 1] = True
+    # translate & rescale
+    p_vertices = vertices
+    p_normals = normals
+    p_uvs = uvs
+    p_faces = faces
 
     p_data = {}
-    p_data['vertices'] = data['vertices'][inbox_vertices]
-    p_data['normals'] = data['normals'][inbox_vertices]
-    p_data['uvs'] = data['uvs'][inbox_vertices]
+    p_data['vertices']    = p_vertices
+    p_data['normals']     = p_normals
+    p_data['uvs']         = p_uvs
+    p_data['faces']       = p_faces
+    p_data['boundingBox'] = bounding_box
 
-    face_mapping = np.where(inbox_vertices, np.cumsum(inbox_vertices).astype(str), '')
-    p_data['faces'] = data['faces'][inbox_faces]
-    p_data['faces'] = face_mapping[p_data['faces'].astype(int) - 1]
+    return p_data
 
-    # resizing into -0.5 ~ 0.5 region
-    s = 1 / max(shape['w'], shape['h'], shape['d'])
-    p_data['vertices'][:, 0] = shape['w'] * s * ((p_data['vertices'][:, 0] - clip['x']) / clip['w'] - 0.5)
-    p_data['vertices'][:, 1] = shape['h'] * s * ((p_data['vertices'][:, 1] - clip['y']) / clip['h'] - 0.5)
-    p_data['vertices'][:, 2] = shape['d'] * s * ((p_data['vertices'][:, 2] - clip['z']) / clip['d'] - 0.5)
+def clip_obj(data, l, g):
+    vertices = data.get('vertices', np.array([]))
 
-    p_data['vertices'][:, 0] = np.round(p_data['vertices'][:, 0], 8)
-    p_data['vertices'][:, 1] = np.round(p_data['vertices'][:, 1], 8)
-    p_data['vertices'][:, 2] = np.round(p_data['vertices'][:, 2], 8)
+    p_vertices = vertices[(vertices[:, 2] >= (l-g)) & (vertices[:, 2] <= (l+g))]
 
-    save_obj(name + '-layer-' + str(layer) + '.obj', p_data)
+    p_data = {}
+    p_data['vertices'] = p_vertices
 
-image = Image.open('00010.tif')
-image.save('00010.png')
+    return p_data
 
-w, h = image.size
-left = w * 0.45
-top = h * 0.45
-right = w * 0.55
-bottom = h * 0.55
-cropped_image = image.crop((left, top, right, bottom))
-cropped_image.save('tile.png')
+gap = 5
+layer = 0
+SEGMENT_LIST = [ '20230505164332', '20230627122904' ]
+LAYER_FOLDER = f'{layer:05d}'
+
+# clear .obj output folder
+shutil.rmtree(OBJ_OUTPUT, ignore_errors=True)
+os.makedirs(OBJ_OUTPUT)
+os.makedirs(os.path.join(OBJ_OUTPUT, LAYER_FOLDER))
+
+meta = {}
+meta['segment'] = []
+
+for SEGMENT_ID in SEGMENT_LIST:
+    filename = os.path.join(os.path.join(OBJ_INPUT, SEGMENT_ID, f'{SEGMENT_ID}.obj'))
+
+    data = parse_obj(filename)
+    p_data = cal_bounding_box(data)
+
+    c = p_data['boundingBox']['min']
+    b = p_data['boundingBox']['max']
+
+    c[c < 0] = 0
+    b[b < 0] = 0
+
+    info = {}
+    info['id'] = SEGMENT_ID
+    info['clip'] = {}
+    info['clip']['x'] = int(c[0])
+    info['clip']['y'] = int(c[1])
+    info['clip']['z'] = int(c[2])
+    info['clip']['w'] = int(b[0] - c[0])
+    info['clip']['h'] = int(b[1] - c[1])
+    info['clip']['d'] = int(b[2] - c[2])
+    meta['segment'].append(info)
+
+    if (int(c[2]) - gap >= layer or int(b[2]) + gap <= layer): continue
+
+    filename = os.path.join(os.path.join(OBJ_INPUT, SEGMENT_ID, f'{SEGMENT_ID}_points.obj'))
+    data = parse_obj(filename)
+    p_data = clip_obj(data, layer, gap)
+    save_obj(os.path.join(OBJ_OUTPUT, LAYER_FOLDER, f'{SEGMENT_ID}_{LAYER_FOLDER}_points.obj'), p_data)
+
+with open(OBJ_INFO, "w") as outfile:
+    json.dump(meta, outfile, indent=4)
+
+with open(f'{OBJ_OUTPUT}/.gitkeep', 'w'): pass
+
+shutil.rmtree('client/public/segment', ignore_errors=True)
+shutil.copytree(OBJ_OUTPUT, 'client/public/segment', dirs_exist_ok=True)
+

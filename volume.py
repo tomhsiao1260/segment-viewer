@@ -3,8 +3,6 @@ import json
 import shutil
 from PIL import Image
 
-# pip freeze > requirements.txt
-
 if not os.path.exists('config.json'):
     print('config.json not found')
     exit()
