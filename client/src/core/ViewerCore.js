@@ -1,8 +1,8 @@
 import * as THREE from 'three'
-import { MOUSE, TOUCH } from 'three'
 import Loader from '../Loader'
 import textureViridis from './textures/cm_viridis.png'
 import { MeshBVH } from 'three-mesh-bvh'
+import { MOUSE, TOUCH } from 'three'
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
@@ -14,95 +14,250 @@ import { VolumeMaterial } from './VolumeMaterial'
 
 export default class ViewerCore {
   constructor({ volumeMeta, segmentMeta }) {
+    this.renderer = null
+    this.scene = null
+    this.camera = null
+    this.cmtexture = null
+    this.clipGeometry = null
+    this.focusGeometry = null
+    this.focusSegmentID = null
+    this.bvh = null
+
     this.volumeMeta = volumeMeta
     this.segmentMeta = segmentMeta
+    this.render = this.render.bind(this)
+    this.canvas = document.querySelector('.webgl')
+
+    this.cardV = null
+    this.cardS = null
+    this.cardVList = []
+    this.cardSList = []
+
+    this.params = {}
+    this.params.surface = 0.003
+    this.params.layer = 0
+    this.params.layers = { select: 0, options: {} }
 
     this.init()
   }
 
   init() {
-    const sizes = {
-      width: window.innerWidth,
-      height: window.innerHeight
-    }
+    // renderer setup
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, canvas: this.canvas })
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.renderer.setClearColor(0, 0)
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace
 
-    // const gui = new GUI()
-    // gui.add({ enhance: generateTile }, 'enhance')
+    // scene setup
+    this.scene = new THREE.Scene()
 
-    const canvas = document.querySelector('canvas.webgl')
-    const scene = new THREE.Scene()
-    const renderer = new THREE.WebGLRenderer({ canvas })
-    renderer.setSize(sizes.width, sizes.height)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    // camera setup
+    const aspect = window.innerWidth / window.innerHeight
+    this.camera = new THREE.OrthographicCamera(-1 * aspect, 1 * aspect, 1, -1, 0.01, 100)
+    this.camera.up.set(0, -1, 0)
+    this.camera.position.z = -1.3
 
-    let card, cardS, clipGeometry, focusGeometry, bvhh, sdfTexx
+    window.addEventListener(
+      'resize',
+      () => {
+        const aspect = window.innerWidth / window.innerHeight
+        this.camera.left = -1 * aspect
+        this.camera.right = 1 * aspect
+        this.camera.top = 1
+        this.camera.bottom = -1
+        this.camera.updateProjectionMatrix()
+        this.renderer.setSize(window.innerWidth, window.innerHeight)
+        this.render()
+      },
+      false
+    )
 
-    const cmTexture = new THREE.TextureLoader().load(textureViridis)
-    const tifTexture = new THREE.TextureLoader().load('volume/00000.png', tick)
-    cmTexture.minFilter = THREE.NearestFilter
-    cmTexture.magFilter = THREE.NearestFilter
-    tifTexture.magFilter = THREE.NearestFilter
-    tifTexture.minFilter = THREE.LinearFilter
+    const controls = new OrbitControls(this.camera, this.canvas)
+    controls.enableDamping = false
+    controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
+    controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
+    controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }
+    controls.addEventListener('change', this.render)
 
-    const segmentSmallMaterial = new SegmentSmallMaterial()
+    this.cmtexture = new THREE.TextureLoader().load(textureViridis)
+    this.cmtexture.minFilter = THREE.NearestFilter
+    this.cmtexture.magFilter = THREE.NearestFilter
+  }
+
+  clear() {
+  }
+
+  async updateVolume() {
+    if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
+
+    const volumeTex = await Loader.getVolumeData('00000.png')
+    volumeTex.magFilter = THREE.NearestFilter
+    volumeTex.minFilter = THREE.LinearFilter
+
+    const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
     const volumeSmallMaterial = new VolumeSmallMaterial()
+    volumeSmallMaterial.uniforms.voldata.value = volumeTex
+    volumeSmallMaterial.uniforms.cmdata.value = this.cmtexture
 
-    const promiseList = []
+    this.cardV = new THREE.Mesh(geometry, volumeSmallMaterial)
+    this.cardV.userData = { w: 2, h: 2, vw: 810, vh: 789, center: new THREE.Vector3() }
+    this.scene.add(this.cardV)
+  }
+
+  async clipSegment() {
+    if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
+
+    await this.updateClipGeometry()
+    await this.updateFocusGeometry()
+  }
+
+  async updateClipGeometry() {
+    if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
+    if (!this.segmentMeta) { console.log('segment meta.json not found'); return }
+
+    const loadingList = []
+    const c_positions = []
+    const chunkList = []
 
     this.segmentMeta.segment.forEach(({ id, clip }) => {
       const loading = Loader.getSegmentData(`00000/${id}_00000_points.obj`)
-      promiseList.push(loading)
+      loadingList.push(loading)
     })
 
-    Promise.all(promiseList).then((res) => {
-      const c_positions = []
-      const chunkList = []
-
-      const [ texture ] = res
-
-      res.forEach((group, i) => {
+    await Promise.all(loadingList).then((list) => {
+      list.forEach((object, i) => {
         const { id, clip } = this.segmentMeta.segment[i]
-        const positions = group.children[0].geometry.getAttribute('position').array
+        const positions = object.children[0].geometry.getAttribute('position').array
         c_positions.push(...positions)
-        chunkList.push({ id, maxIndex: c_positions.length / 3, clip  })
+        chunkList.push({ id, clip, maxIndex: c_positions.length / 3  })
       })
-
-      clipGeometry = new THREE.BufferGeometry()
-      clipGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c_positions), 3))
-      clipGeometry.userData.chunkList = chunkList
-      // clipGeometry.userData.id = id
-
-      const [ sdfTex, bvh ] = sdfTexGenerate(clipGeometry)
-      bvhh = bvh
-      sdfTexx = sdfTex
-
-      const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
-      volumeSmallMaterial.uniforms.utifTexture.value = tifTexture
-      volumeSmallMaterial.uniforms.cmdata.value = cmTexture
-
-      card = new THREE.Mesh(geometry, volumeSmallMaterial)
-      card.userData = { w: 2, h: 2, vw: 810, vh: 789, center: new THREE.Vector3() }
-      scene.add(card)
-
-      const geometryS = new THREE.PlaneGeometry(2, 2, 1, 1)
-      segmentSmallMaterial.uniforms.sdfTex.value = sdfTexx.texture
-
-      cardS = new THREE.Mesh(geometryS, segmentSmallMaterial)
-      cardS.position.set(0, 0, -0.7)
-      // scene.add(cardS)
-
-      // gui.add(segmentSmallMaterial.uniforms.surface, 'value', 0, 10.0).name('surface').onChange(tick)
-
-      tick()
     })
+
+    this.clipGeometry = new THREE.BufferGeometry()
+    this.clipGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c_positions), 3))
+    this.clipGeometry.userData.chunkList = chunkList
+
+    const [ sdfTex, bvh ] = this.sdfTexGenerate(this.clipGeometry)
+    const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
+    const segmentSmallMaterial = new SegmentSmallMaterial()
+    segmentSmallMaterial.uniforms.sdfTex.value = sdfTex.texture
+
+    this.cardS = new THREE.Mesh(geometry, segmentSmallMaterial)
+    this.cardS.position.set(0, 0, -0.7)
+    this.scene.add(this.cardS)
+
+    if (this.bvh) {
+      if (this.bvh.geometry.userData.id === id) return
+      this.bvh.geometry.dispose()
+      this.bvh.geometry = null
+      this.bvh = null
+    }
+    this.bvh = bvh
+  }
+
+  updateFocusGeometry() {
+    const q = { start: 0, end: 0, sID: null, vID: null }
+    const { chunkList } = this.clipGeometry.userData
+    for (let i = 0; i < chunkList.length; i += 1) {
+      const { id: sID } = chunkList[i]
+      if (sID === this.focusSegmentID) {
+        q.sID = sID
+        q.vID = this.params.layers.select
+        q.end = chunkList[i].maxIndex
+        q.start = (i === 0) ? 0 : chunkList[i - 1].maxIndex
+        break
+      }
+    }
+    if (!q.end && !this.focusGeometry) return
+    if (!q.end) { this.focusGeometry.dispose(); this.focusGeometry = null; return }
+    // return if current focus geometry already exist
+    const f = this.focusGeometry
+    if (f && f.userData.sID === q.sID && f.userData.vID === q.vID) return
+
+    const f_positions = this.clipGeometry.getAttribute('position').array.slice(q.start * 3, q.end * 3)
+    this.focusGeometry = new THREE.BufferGeometry()
+    this.focusGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
+    this.focusGeometry.userData = q
+
+    const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry)
+    this.cardS.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
+  }
+
+  sdfTexGenerate(geometry) {
+    const matrix = new THREE.Matrix4()
+    const center = new THREE.Vector3()
+    const quat = new THREE.Quaternion()
+    const scaling = new THREE.Vector3()
+
+    scaling.set(8096, 7888, 10)
+    center.set(8096 / 2, 7888 / 2, 0)
+    matrix.compose(center, quat, scaling)
+
+    const bvh = new MeshBVH(geometry, { maxLeafTris: 1 })
+    const generateSdfPass = new FullScreenQuad(new GenerateSDFMaterial())
+    generateSdfPass.material.uniforms.bvh.value.updateFrom(bvh)
+    generateSdfPass.material.uniforms.matrix.value.copy(matrix)
+    generateSdfPass.material.uniforms.zValue.value = 0.5
+
+    const sdfTex = new THREE.WebGLRenderTarget(810, 789)
+    sdfTex.texture.format = THREE.RedFormat
+    sdfTex.texture.type = THREE.FloatType
+    sdfTex.texture.minFilter = THREE.LinearFilter
+    sdfTex.texture.magFilter = THREE.LinearFilter
+
+    this.renderer.setRenderTarget(sdfTex)
+    generateSdfPass.render(this.renderer)
+    this.renderer.setRenderTarget(null)
+
+    return [ sdfTex, bvh ]
+  }
+
+  getLabel(mouse) {
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(mouse, this.camera)
+    const intersects = raycaster.intersectObjects([ this.cardV ])
+    if (!intersects.length) return
+
+    const p = intersects[0].point
+    const c = intersects[0].object.userData
+
+    const point = new THREE.Vector3()
+    point.x = (p.x - c.center.x) / (c.w / 2) / 2 + 0.5
+    point.y = (p.y - c.center.y) / (c.h / 2) / 2 * (810 / 789) + 0.5
+    point.z = 0
+
+    point.x *= 8096
+    point.y *= 7888
+
+    const target = this.bvh.closestPointToPoint(point, {}, 0, 100)
+    if (!target) return
+
+    const { chunkList } = this.bvh.geometry.userData
+    const hitIndex = this.bvh.geometry.index.array[target.faceIndex * 3]
+
+    for (let i = 0; i < chunkList.length; i ++) {
+      const { id: sID, clip, maxIndex } = chunkList[i]
+      if (maxIndex > hitIndex) {
+        this.focusSegmentID = sID
+        return { id: sID, clip } 
+      }
+    }
+  }
+
+  abc() {
+    // const gui = new GUI()
+    // gui.add({ enhance: generateTile }, 'enhance')
+
+    let clipGeometry, focusGeometry, bvhh, sdfTexx
 
     const geometryP = new THREE.PlaneGeometry(2 * (809/8096), 2 * (788/8096), 1, 1)
 
     function generateTile() {
       const mouse = new THREE.Vector2()
       const raycaster = new THREE.Raycaster()
-      raycaster.setFromCamera(mouse, camera)
-      const intersects = raycaster.intersectObjects([ card ])
+      raycaster.setFromCamera(mouse, this.camera)
+      const intersects = raycaster.intersectObjects([ this.cardV ])
 
       if (!intersects.length) return
 
@@ -139,187 +294,12 @@ export default class ViewerCore {
         const cardPP = new THREE.Mesh(geometryP, segmentMaterial)
         cardPP.position.set(x, y, -0.8)
         // scene.add(cardPP)
-
-        tick()
       })
     }
+  }
 
-    function updateFocusGeometry(clickID) {
-      const q = { start: 0, end: 0, sID: null, vID: null }
-      const { chunkList } = clipGeometry.userData
-      for (let i = 0; i < chunkList.length; i += 1) {
-        const { id: sID } = chunkList[i]
-        if (sID === clickID) {
-          q.sID = sID
-          // q.vID = this.params.layers.select
-          q.end = chunkList[i].maxIndex
-          q.start = (i === 0) ? 0 : chunkList[i - 1].maxIndex
-          break
-        }
-      }
-
-      if (!q.end && !focusGeometry) return
-      if (!q.end) { focusGeometry.dispose(); focusGeometry = null; return }
-      // return if current focus geometry already exist
-      const f = focusGeometry
-      // if (f && f.userData.sID === q.sID && f.userData.vID === q.vID) return
-      if (f && f.userData.sID === q.sID) return
-
-      const f_positions = clipGeometry.getAttribute('position').array.slice(q.start * 3, q.end * 3)
-
-      const focusGeometry_ = new THREE.BufferGeometry()
-      focusGeometry_.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
-      focusGeometry_.userData = q
-
-      return focusGeometry_
-    }
-
-    window.addEventListener('resize', () => {
-      // Update sizes
-      sizes.width = window.innerWidth
-      sizes.height = window.innerHeight
-
-      // Update camera
-      // camera.aspect = sizes.width / sizes.height
-      camera.left = -1 * sizes.width / sizes.height
-      camera.right = 1 * sizes.width / sizes.height
-      camera.top = 1
-      camera.bottom = -1
-
-      camera.updateProjectionMatrix()
-
-      // Update renderer
-      renderer.setSize(sizes.width, sizes.height)
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-
-      tick()
-    })
-
-    // const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.01, 100)
-    const camera = new THREE.OrthographicCamera(-1 * sizes.width / sizes.height, 1 * sizes.width / sizes.height, 1, -1, 0.01, 100)
-    camera.up.set(0, -1, 0)
-    camera.position.z = -1.3
-    scene.add(camera)
-
-    const controls = new OrbitControls(camera, canvas)
-    controls.enableDamping = false
-    controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
-    controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
-    controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }
-
-    controls.addEventListener('change', tick)
-
-    function tick() {
-      renderer.render(scene, camera)
-    }
-
-    function sdfTexGenerate(geometry) {
-      const nrrd = { w: 810, h: 789, d: 1 }
-      const s = 1 / Math.max(nrrd.w, nrrd.h, nrrd.d)
-
-      const matrix = new THREE.Matrix4()
-      // const center = new THREE.Vector3()
-      const center = new THREE.Vector3(8096 / 2, 7888 / 2, 0)
-      const quat = new THREE.Quaternion()
-      const scaling = new THREE.Vector3()
-
-      scaling.set(8096, 7888, 10)
-      matrix.compose(center, quat, scaling)
-
-      const bvh = new MeshBVH(geometry, { maxLeafTris: 1 })
-      const generateSdfPass = new FullScreenQuad(new GenerateSDFMaterial())
-      generateSdfPass.material.uniforms.bvh.value.updateFrom(bvh)
-      generateSdfPass.material.uniforms.matrix.value.copy(matrix)
-      generateSdfPass.material.uniforms.zValue.value = 0.5
-
-      // const sdfTex = new THREE.WebGLRenderTarget(nrrd.w * 10, nrrd.h * 10)
-      const sdfTex = new THREE.WebGLRenderTarget(nrrd.w, nrrd.h)
-      sdfTex.texture.format = THREE.RedFormat
-      sdfTex.texture.type = THREE.FloatType
-      sdfTex.texture.minFilter = THREE.LinearFilter
-      sdfTex.texture.magFilter = THREE.LinearFilter
-      renderer.setRenderTarget(sdfTex)
-      generateSdfPass.render(renderer)
-      renderer.setRenderTarget(null)
-
-      return [ sdfTex, bvh ]
-    }
-
-    function getLabel(mouse) {
-      const raycaster = new THREE.Raycaster()
-      raycaster.setFromCamera(mouse, camera)
-      const intersects = raycaster.intersectObjects([ card ])
-
-      if (!intersects.length) return
-
-      const p = intersects[0].point
-      const c = intersects[0].object.userData
-
-      const point = new THREE.Vector3()
-      point.x = (p.x - c.center.x) / (c.w / 2) / 2 + 0.5
-      point.y = (p.y - c.center.y) / (c.h / 2) / 2 * (810 / 789) + 0.5
-      point.z = 0
-
-      point.x *= 8096
-      point.y *= 7888
-
-      const target = bvhh.closestPointToPoint(point, {}, 0, 100)
-      if (!target) return
-
-      const { chunkList } = bvhh.geometry.userData
-      const hitIndex = bvhh.geometry.index.array[target.faceIndex * 3]
-
-      for (let i = 0; i < chunkList.length; i ++) {
-        const { id: sID, maxIndex, clip } = chunkList[i]
-        if (maxIndex > hitIndex) {
-          return { id: sID, clip  }
-        }
-      }
-    }
-
-    // segment labeling
-    function labeling() {
-      const mouse = new THREE.Vector2()
-      const labelDiv = document.createElement('div')
-      labelDiv.id = 'label'
-      document.body.appendChild(labelDiv)
-
-      window.addEventListener('mousedown', (e) => {
-        if (!(e.target instanceof HTMLCanvasElement)) return
-        mouse.x = e.clientX / window.innerWidth * 2 - 1
-        mouse.y = - (e.clientY / window.innerHeight) * 2 + 1
-
-        // const { mode } = viewer.params
-        labelDiv.style.display = 'none'
-
-        // const loadingDiv = document.querySelector('#loading')
-        // if (loadingDiv.style.display === 'inline') return
-
-        if (true) {
-          // only this line is important
-          const sTarget = getLabel(mouse)
-          if (!sTarget) { return }
-
-          const { id, clip } = sTarget
-          labelDiv.style.display = 'inline'
-          labelDiv.style.left = (e.clientX + 20) + 'px'
-          labelDiv.style.top = (e.clientY + 20) + 'px'
-          labelDiv.innerHTML = `${id}<br>layer: ${clip.z}~${clip.z+clip.d}`
-          // as well as this line
-          updateViewer(id)
-        }
-      })
-    }
-
-    labeling()
-
-    function updateViewer(clickID) {
-      const focusGeometry = updateFocusGeometry(clickID)
-      if (!focusGeometry) return
-      const [ sdfTexFocus, _ ] = sdfTexGenerate(focusGeometry)
-      cardS.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
-
-      tick()
-    }
+  render() {
+    if (!this.renderer) return
+    this.renderer.render(this.scene, this.camera)
   }
 }
