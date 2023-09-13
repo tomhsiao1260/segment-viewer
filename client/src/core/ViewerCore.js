@@ -12,6 +12,7 @@ import { GenerateSDFMaterial } from './GenerateSDFMaterial'
 
 export default class ViewerCore {
   constructor({ volumeMeta, segmentMeta }) {
+    this.bvh = null
     this.renderer = null
     this.scene = null
     this.camera = null
@@ -19,7 +20,8 @@ export default class ViewerCore {
     this.clipGeometry = null
     this.focusGeometry = null
     this.focusSegmentID = null
-    this.bvh = null
+    this.subVolumeMeta = null
+    this.subSegmentMeta = null
 
     this.volumeMeta = volumeMeta
     this.segmentMeta = segmentMeta
@@ -79,6 +81,12 @@ export default class ViewerCore {
     this.cmtexture = new THREE.TextureLoader().load(textureViridis)
     this.cmtexture.minFilter = THREE.NearestFilter
     this.cmtexture.magFilter = THREE.NearestFilter
+
+    // list all layer options
+    for (let i = 0; i < this.volumeMeta.volume.length; i++) {
+      const { id } = this.volumeMeta.volume[i]
+      this.params.layers.options[ id ] = i
+    }
   }
 
   clear() {
@@ -87,22 +95,33 @@ export default class ViewerCore {
   async updateVolume() {
     if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
 
-    const volumeTex = await Loader.getVolumeData('00000.png')
+    const index = this.params.layers.select
+    const { id, clip } = this.volumeMeta.volume[index]
+
+    const volumeTex = await Loader.getVolumeData(`${id}.png`)
     volumeTex.magFilter = THREE.NearestFilter
     volumeTex.minFilter = THREE.LinearFilter
 
     const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
     const layerMaterial = new LayerMaterial()
+    layerMaterial.uniforms.volumeAspect.value = clip.w / clip.h
+    layerMaterial.uniforms.screenAspect.value = 2 / 2
     layerMaterial.uniforms.voldata.value = volumeTex
     layerMaterial.uniforms.cmdata.value = this.cmtexture
 
     this.card = new THREE.Mesh(geometry, layerMaterial)
-    this.card.userData = { w: 2, h: 2, vw: 810, vh: 789, center: new THREE.Vector3() }
+    this.card.userData = { w: 2, h: 2, vw: clip.w, vh: clip.h, center: new THREE.Vector3() }
     this.scene.add(this.card)
   }
 
   async clipSegment() {
     if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
+
+    const index = this.params.layers.select
+    const layer = this.segmentMeta.layer[index]
+
+    this.subSegmentMeta = await Loader.getSubSegmentMeta(layer)
+    this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
 
     await this.updateClipGeometry()
     await this.updateFocusGeometry()
@@ -116,17 +135,21 @@ export default class ViewerCore {
     const c_positions = []
     const chunkList = []
 
-    this.segmentMeta.segment.forEach(({ id, clip }) => {
-      const loading = Loader.getSegmentData(`00000/${id}_00000_points.obj`)
+    const folder = this.subSegmentMeta.layer
+    this.subSegmentMeta.segment.forEach(({ name }) => {
+      const loading = Loader.getSegmentData(`${folder}/${name}`)
       loadingList.push(loading)
     })
 
+    const clipMap = {}
+    this.segmentMeta.segment.forEach(({ id, clip }) => { clipMap[id] = clip })
+
     await Promise.all(loadingList).then((list) => {
       list.forEach((object, i) => {
-        const { id, clip } = this.segmentMeta.segment[i]
+        const { id } = this.subSegmentMeta.segment[i]
         const positions = object.children[0].geometry.getAttribute('position').array
         c_positions.push(...positions)
-        chunkList.push({ id, clip, maxIndex: c_positions.length / 3  })
+        chunkList.push({ id, clip: clipMap[id], maxIndex: c_positions.length / 3  })
       })
     })
 
@@ -134,11 +157,15 @@ export default class ViewerCore {
     this.clipGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c_positions), 3))
     this.clipGeometry.userData.chunkList = chunkList
 
-    const scaling = new THREE.Vector3(8096, 7888, 10)
-    const center = new THREE.Vector3(8096 / 2, 7888 / 2, 0)
-    const [ sdfTex, bvh ] = this.sdfTexGenerate(this.clipGeometry, center, scaling)
+    const gap = 5
+    const index = this.params.layers.select
+    const { clip } = this.volumeMeta.volume[index]
 
-    const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
+    const bufferWidth = Math.round(clip.w / 10)
+    const bufferHeight = Math.round(clip.h / 10)
+    const scaling = new THREE.Vector3(clip.w, clip.h, 2 * gap)
+    const center = new THREE.Vector3(clip.w / 2, clip.h / 2, clip.z)
+    const [ sdfTex, bvh ] = this.sdfTexGenerate(this.clipGeometry, center, scaling, bufferWidth, bufferHeight)
     this.card.material.uniforms.sdfTex.value = sdfTex.texture
 
     if (this.bvh) {
@@ -174,21 +201,29 @@ export default class ViewerCore {
     this.focusGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
     this.focusGeometry.userData = q
 
-    const scaling = new THREE.Vector3(8096, 7888, 10)
-    const center = new THREE.Vector3(8096 / 2, 7888 / 2, 0)
-    const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry, center, scaling)
+    const gap = 5
+    const index = this.params.layers.select
+    const { clip } = this.volumeMeta.volume[index]
+
+    const bufferWidth = Math.round(clip.w / 10)
+    const bufferHeight = Math.round(clip.h / 10)
+    const scaling = new THREE.Vector3(clip.w, clip.h, 2 * gap)
+    const center = new THREE.Vector3(clip.w / 2, clip.h / 2, clip.z)
+    const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry, center, scaling, bufferWidth, bufferHeight)
     this.card.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
 
     this.cardList.forEach((card) => {
-      const { idx, idy } = card.userData
-      const scaling = new THREE.Vector3(8096/10, 7888/10, 10/10)
-      const center = new THREE.Vector3(8096/20 * (2*idx + 1), 7888/20 * (2*idy + 1), 0)
-      const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry, center, scaling)
+      const { idx, idy, clip } = card.userData
+      const bufferWidth = clip.w
+      const bufferHeight = clip.h
+      const scaling = new THREE.Vector3(clip.w, clip.h, 2 * gap)
+      const center = new THREE.Vector3(clip.x + clip.w / 2, clip.y + clip.h / 2, clip.z)
+      const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry, center, scaling, bufferWidth, bufferHeight)
       card.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
     })
   }
 
-  sdfTexGenerate(geometry, center, scaling) {
+  sdfTexGenerate(geometry, center, scaling, bufferWidth, bufferHeight) {
     const matrix = new THREE.Matrix4()
     const quat = new THREE.Quaternion()
     matrix.compose(center, quat, scaling)
@@ -199,7 +234,7 @@ export default class ViewerCore {
     generateSdfPass.material.uniforms.matrix.value.copy(matrix)
     generateSdfPass.material.uniforms.zValue.value = 0.5
 
-    const sdfTex = new THREE.WebGLRenderTarget(810, 789)
+    const sdfTex = new THREE.WebGLRenderTarget(bufferWidth, bufferHeight)
     sdfTex.texture.format = THREE.RedFormat
     sdfTex.texture.type = THREE.FloatType
     sdfTex.texture.minFilter = THREE.LinearFilter
@@ -218,16 +253,18 @@ export default class ViewerCore {
     const intersects = raycaster.intersectObjects([ this.card ])
     if (!intersects.length) return
 
+    const index = this.params.layers.select
+    const { clip } = this.volumeMeta.volume[index]
+
     const p = intersects[0].point
     const c = intersects[0].object.userData
 
     const point = new THREE.Vector3()
     point.x = (p.x - c.center.x) / (c.w / 2) / 2 + 0.5
-    point.y = (p.y - c.center.y) / (c.h / 2) / 2 * (810 / 789) + 0.5
-    point.z = 0
-
-    point.x *= 8096
-    point.y *= 7888
+    point.y = (p.y - c.center.y) / (c.h / 2) / 2 * (clip.w / clip.h) + 0.5
+    point.x *= clip.w
+    point.y *= clip.h
+    point.z = clip.z
 
     const target = this.bvh.closestPointToPoint(point, {}, 0, 100)
     if (!target) return
@@ -255,8 +292,9 @@ export default class ViewerCore {
     const c = intersects[0].object.userData
 
     // x: 0~9 y: 0~9
-    const idx = Math.floor(10 * (p.x - c.center.x + 1) / 2)
-    const idy = Math.floor(10 * (p.y - c.center.y + 1) / 2)
+    const { split } = this.subVolumeMeta
+    const idx = Math.floor(split * ((p.x - c.center.x) / (c.w * 1.0) + 0.5))
+    const idy = Math.floor(split * ((p.y - c.center.y) / (c.h * (c.vh / c.vw)) + 0.5))
 
     // return if already exist
     for (let i = 0; i < this.cardList.length; i++) {
@@ -264,16 +302,26 @@ export default class ViewerCore {
       if (idx === vx && idy === vy) return
     }
 
-    const w = 2 * (809 / 8096)
-    const h = 2 * (788 / 8096)
-    const x = c.center.x - c.w / 2 * 1.0 + (idx + 0.5) * w
-    const y = c.center.y - c.h / 2 * (c.vh / c.vw) + (idy + 0.5) * h
+    const info = {}
+    this.subVolumeMeta.volume.forEach(({ idx: vx, idy: vy, name, clip }) => {
+      if (idx === vx && idy === vy) { info.name = name; info.clip = clip }
+    })
+
+    const w = c.w * 1.0 * (info.clip.w / c.vw)
+    const h = w * (info.clip.h / info.clip.w)
+    const uvx = (info.clip.x + info.clip.w / 2) / c.vw
+    const uvy = (info.clip.y + info.clip.h / 2) / c.vh
+    const x = c.center.x + (uvx - 0.5) * c.w * 1.0
+    const y = c.center.y + (uvy - 0.5) * c.h * (c.vh / c.vw)
 
     const geometry = new THREE.PlaneGeometry(w, h, 1, 1)
     const material = new LayerEnhanceMaterial()
+    material.uniforms.volumeAspect.value = w / h
+    material.uniforms.screenAspect.value = w / h
+
     const card = new THREE.Mesh(geometry, material)
     card.position.set(x, y, -0.5)
-    card.userData = { idx, idy }
+    card.userData = { idx, idy, clip: info.clip, filename: info.name }
 
     this.scene.add(card)
     this.cardList.push(card)
@@ -283,8 +331,11 @@ export default class ViewerCore {
   }
 
   async enhanceVolume(card) {
-    const { idx, idy } = card.userData
-    const voldata = await Loader.getVolumeData(`00000/cell_yxz_00${idy}_00${idx}_00000.png`)
+    const index = this.params.layers.select
+    const { id } = this.volumeMeta.volume[index]
+    const { filename } = card.userData
+
+    const voldata = await Loader.getVolumeData(`${id}/${filename}`)
     voldata.magFilter = THREE.NearestFilter
     voldata.minFilter = THREE.LinearFilter
 
@@ -293,13 +344,18 @@ export default class ViewerCore {
   }
 
   async enhanceSegment(card) {
-    const { idx, idy } = card.userData
-    const scaling = new THREE.Vector3(8096/10, 7888/10, 10/10)
-    const center = new THREE.Vector3(8096/20 * (2*idx + 1), 7888/20 * (2*idy + 1), 0)
-    const [ sdfTex, bvh ] = this.sdfTexGenerate(this.clipGeometry, center, scaling)
-    const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry, center, scaling)
+    const gap = 5
+    const { idx, idy, clip } = card.userData
+    const bufferWidth = clip.w
+    const bufferHeight = clip.h
+    const scaling = new THREE.Vector3(clip.w, clip.h, 2 * gap)
+    const center = new THREE.Vector3(clip.x + clip.w / 2, clip.y + clip.h / 2, clip.z)
+    const [ sdfTex, bvh ] = this.sdfTexGenerate(this.clipGeometry, center, scaling, bufferWidth, bufferHeight)
 
     card.material.uniforms.sdfTex.value = sdfTex.texture
+
+    if (!this.focusGeometry) return
+    const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry, center, scaling, bufferWidth, bufferHeight)
     card.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
   }
 
