@@ -6,11 +6,9 @@ import { MOUSE, TOUCH } from 'three'
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
+import { LayerMaterial } from './LayerMaterial'
+import { LayerEnhanceMaterial } from './LayerEnhanceMaterial'
 import { GenerateSDFMaterial } from './GenerateSDFMaterial'
-import { SegmentSmallMaterial } from './SegmentSmallMaterial'
-import { VolumeSmallMaterial } from './VolumeSmallMaterial'
-import { SegmentMaterial } from './SegmentMaterial'
-import { VolumeMaterial } from './VolumeMaterial'
 
 export default class ViewerCore {
   constructor({ volumeMeta, segmentMeta }) {
@@ -28,11 +26,8 @@ export default class ViewerCore {
     this.render = this.render.bind(this)
     this.canvas = document.querySelector('.webgl')
 
-    this.cardV = null
-    this.cardS = null
-    this.cardVList = []
-    this.cardSList = []
-    this.enhanceList = []
+    this.card = null
+    this.cardList = []
 
     this.params = {}
     this.params.surface = 7.5
@@ -97,13 +92,13 @@ export default class ViewerCore {
     volumeTex.minFilter = THREE.LinearFilter
 
     const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
-    const volumeSmallMaterial = new VolumeSmallMaterial()
-    volumeSmallMaterial.uniforms.voldata.value = volumeTex
-    volumeSmallMaterial.uniforms.cmdata.value = this.cmtexture
+    const layerMaterial = new LayerMaterial()
+    layerMaterial.uniforms.voldata.value = volumeTex
+    layerMaterial.uniforms.cmdata.value = this.cmtexture
 
-    this.cardV = new THREE.Mesh(geometry, volumeSmallMaterial)
-    this.cardV.userData = { w: 2, h: 2, vw: 810, vh: 789, center: new THREE.Vector3() }
-    this.scene.add(this.cardV)
+    this.card = new THREE.Mesh(geometry, layerMaterial)
+    this.card.userData = { w: 2, h: 2, vw: 810, vh: 789, center: new THREE.Vector3() }
+    this.scene.add(this.card)
   }
 
   async clipSegment() {
@@ -144,12 +139,7 @@ export default class ViewerCore {
     const [ sdfTex, bvh ] = this.sdfTexGenerate(this.clipGeometry, center, scaling)
 
     const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
-    const segmentSmallMaterial = new SegmentSmallMaterial()
-    segmentSmallMaterial.uniforms.sdfTex.value = sdfTex.texture
-
-    this.cardS = new THREE.Mesh(geometry, segmentSmallMaterial)
-    this.cardS.position.set(0, 0, -0.7)
-    this.scene.add(this.cardS)
+    this.card.material.uniforms.sdfTex.value = sdfTex.texture
 
     if (this.bvh) {
       if (this.bvh.geometry.userData.id === id) return
@@ -187,9 +177,9 @@ export default class ViewerCore {
     const scaling = new THREE.Vector3(8096, 7888, 10)
     const center = new THREE.Vector3(8096 / 2, 7888 / 2, 0)
     const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry, center, scaling)
-    this.cardS.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
+    this.card.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
 
-    this.cardSList.forEach((card) => {
+    this.cardList.forEach((card) => {
       const { idx, idy } = card.userData
       const scaling = new THREE.Vector3(8096/10, 7888/10, 10/10)
       const center = new THREE.Vector3(8096/20 * (2*idx + 1), 7888/20 * (2*idy + 1), 0)
@@ -225,7 +215,7 @@ export default class ViewerCore {
   getLabel(mouse) {
     const raycaster = new THREE.Raycaster()
     raycaster.setFromCamera(mouse, this.camera)
-    const intersects = raycaster.intersectObjects([ this.cardV ])
+    const intersects = raycaster.intersectObjects([ this.card ])
     if (!intersects.length) return
 
     const p = intersects[0].point
@@ -258,7 +248,7 @@ export default class ViewerCore {
     const mouse = new THREE.Vector2()
     const raycaster = new THREE.Raycaster()
     raycaster.setFromCamera(mouse, this.camera)
-    const intersects = raycaster.intersectObjects([ this.cardV ])
+    const intersects = raycaster.intersectObjects([ this.card ])
     if (!intersects.length) return
 
     const p = intersects[0].point
@@ -269,58 +259,55 @@ export default class ViewerCore {
     const idy = Math.floor(10 * (p.y - c.center.y + 1) / 2)
 
     // return if already exist
-    for (let i = 0; i < this.enhanceList.length; i++) {
-      const [ vx, vy ] = this.enhanceList[i]
+    for (let i = 0; i < this.cardList.length; i++) {
+      const { idx: vx, idy: vy } = this.cardList[i].userData
       if (idx === vx && idy === vy) return
     }
-    this.enhanceList.push([idx, idy])
 
-    const geometry = new THREE.PlaneGeometry(2 * (809 / 8096), 2 * (788 / 8096), 1, 1)
-    const x = c.center.x - c.w / 2 * 1.0 + (idx + 0.5) * geometry.parameters.width
-    const y = c.center.y - c.h / 2 * (c.vh / c.vw) + (idy + 0.5) * geometry.parameters.height
+    const w = 2 * (809 / 8096)
+    const h = 2 * (788 / 8096)
+    const x = c.center.x - c.w / 2 * 1.0 + (idx + 0.5) * w
+    const y = c.center.y - c.h / 2 * (c.vh / c.vw) + (idy + 0.5) * h
 
-    await this.enhanceVolume(geometry, x, y, idx, idy)
-    await this.enhanceSegment(geometry, x, y, idx, idy)
-  }
-
-  async enhanceVolume(geometry, x, y, idx, idy) {
-    const voldata = await Loader.getVolumeData(`00000/cell_yxz_00${idy}_00${idx}_00000.png`)
-    voldata.magFilter = THREE.NearestFilter
-    voldata.minFilter = THREE.LinearFilter
-
-    const volumeMaterial = new VolumeMaterial()
-    volumeMaterial.uniforms.cmdata.value = this.cmtexture
-    volumeMaterial.uniforms.voldata.value = voldata
-
-    const card = new THREE.Mesh(geometry, volumeMaterial)
+    const geometry = new THREE.PlaneGeometry(w, h, 1, 1)
+    const material = new LayerEnhanceMaterial()
+    const card = new THREE.Mesh(geometry, material)
     card.position.set(x, y, -0.5)
     card.userData = { idx, idy }
 
     this.scene.add(card)
-    this.cardVList.push(card)
+    this.cardList.push(card)
+
+    await this.enhanceVolume(card)
+    await this.enhanceSegment(card)
   }
 
-  async enhanceSegment(geometry, x, y, idx, idy) {
+  async enhanceVolume(card) {
+    const { idx, idy } = card.userData
+    const voldata = await Loader.getVolumeData(`00000/cell_yxz_00${idy}_00${idx}_00000.png`)
+    voldata.magFilter = THREE.NearestFilter
+    voldata.minFilter = THREE.LinearFilter
+
+    card.material.uniforms.cmdata.value = this.cmtexture
+    card.material.uniforms.voldata.value = voldata
+  }
+
+  async enhanceSegment(card) {
+    const { idx, idy } = card.userData
     const scaling = new THREE.Vector3(8096/10, 7888/10, 10/10)
     const center = new THREE.Vector3(8096/20 * (2*idx + 1), 7888/20 * (2*idy + 1), 0)
     const [ sdfTex, bvh ] = this.sdfTexGenerate(this.clipGeometry, center, scaling)
+    const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry, center, scaling)
 
-    const segmentMaterial = new SegmentMaterial()
-    segmentMaterial.uniforms.sdfTex.value = sdfTex.texture
-
-    const card = new THREE.Mesh(geometry, segmentMaterial)
-    card.position.set(x, y, -0.85)
-    card.userData = { idx, idy }
-
-    this.scene.add(card)
-    this.cardSList.push(card)
+    card.material.uniforms.sdfTex.value = sdfTex.texture
+    card.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
   }
 
   render() {
     if (!this.renderer) return
 
-    this.cardS.material.uniforms.surface.value = this.params.surface
-    this.cardSList.forEach((card) => { card.material.uniforms.surface.value = this.params.surface })
+    this.card.material.uniforms.surface.value = this.params.surface
+    this.cardList.forEach((card) => { card.material.uniforms.surface.value = this.params.surface })
     this.renderer.render(this.scene, this.camera)
   }
 }
