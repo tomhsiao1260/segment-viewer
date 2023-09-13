@@ -114,20 +114,55 @@ def clip_obj(data, layer):
 
     return p_data
 
-gap = 5
-layer = 0
-SEGMENT_LIST = [ '20230505164332', '20230627122904', '20230505175240', '20230506133355', '20230510153843', '20230626140105' ]
-LAYER_FOLDER = f'{layer:05d}'
+GAP = 5
+INTERVAL = 50
+LAYER_LIST = [ 0, INTERVAL, 2 * INTERVAL ]
 
-# clear .obj output folder
+# clear .obj output folder & generate layer id list
 shutil.rmtree(OBJ_OUTPUT, ignore_errors=True)
 os.makedirs(OBJ_OUTPUT)
-os.makedirs(os.path.join(OBJ_OUTPUT, LAYER_FOLDER))
 
+for LAYER in LAYER_LIST:
+    os.makedirs(os.path.join(OBJ_OUTPUT, f'{LAYER:05d}'))
+
+# receive segmentation id list
+SEGMENT_LIST = []
+
+if (OBJ_INPUT != ''):
+    subfolders = [f.path for f in os.scandir(OBJ_INPUT) if f.is_dir()]
+
+    for subfolder in subfolders:
+        folder_name = os.path.basename(subfolder)
+        obj_path = os.path.join(subfolder, folder_name + '.obj')
+        obj_points_path = os.path.join(subfolder, folder_name + '_points.obj')
+
+        if os.path.isfile(obj_path) & os.path.isfile(obj_points_path):
+            SEGMENT_LIST.append(folder_name)
+        # else:
+        #     raise RuntimeError(f'No .obj file found in {subfolder}. Please check your .volpkg folder.')
+
+# main meta.json
 meta = {}
+meta['layer'] = []
 meta['segment'] = []
 
-for SEGMENT_ID in SEGMENT_LIST:
+for LAYER in LAYER_LIST: meta['layer'].append(f'{LAYER:05d}')
+
+# each layer meta.json
+meta_list = []
+
+for LAYER in LAYER_LIST:
+    info = {}
+    info['layer'] = f'{LAYER:05d}'
+    info['segment'] = []
+    meta_list.append(info)
+
+
+# SEGMENT_LIST = SEGMENT_LIST[:10]
+
+for i, SEGMENT_ID in enumerate(SEGMENT_LIST):
+    print(f'processing {SEGMENT_ID} ... {i+1}/{len(SEGMENT_LIST)}')
+
     filename = os.path.join(os.path.join(OBJ_INPUT, SEGMENT_ID, f'{SEGMENT_ID}_points.obj'))
 
     data = parse_obj(filename)
@@ -150,19 +185,32 @@ for SEGMENT_ID in SEGMENT_LIST:
     info['clip']['d'] = int(b[2] - c[2])
     meta['segment'].append(info)
 
-    if (int(c[2]) - gap >= layer or int(b[2]) + gap <= layer): continue
+    for j, LAYER in enumerate(LAYER_LIST):
+        if (int(c[2]) - GAP >= LAYER or int(b[2]) + GAP <= LAYER): continue
 
-    selected_layer = layer
-    if (int(c[2]) > layer): selected_layer = int(c[2])
-    if (int(b[2]) < layer): selected_layer = int(b[2])
+        selected_layer = LAYER
+        if (int(c[2]) > LAYER): selected_layer = int(c[2])
+        if (int(b[2]) < LAYER): selected_layer = int(b[2])
 
-    filename = os.path.join(os.path.join(OBJ_INPUT, SEGMENT_ID, f'{SEGMENT_ID}_points.obj'))
-    data = parse_obj(filename)
-    p_data = clip_obj(data, selected_layer)
-    save_obj(os.path.join(OBJ_OUTPUT, LAYER_FOLDER, f'{SEGMENT_ID}_{LAYER_FOLDER}_points.obj'), p_data)
+        filename = os.path.join(os.path.join(OBJ_INPUT, SEGMENT_ID, f'{SEGMENT_ID}_points.obj'))
+        data = parse_obj(filename)
+        p_data = clip_obj(data, selected_layer)
+        save_obj(os.path.join(OBJ_OUTPUT, f'{LAYER:05d}', f'{SEGMENT_ID}_{LAYER:05d}_points.obj'), p_data)
 
+        info = {}
+        info['id'] = SEGMENT_ID
+        info['name'] = f'{SEGMENT_ID}_{LAYER:05d}_points.obj'
+
+        meta_list[j]['segment'].append(info)
+
+# save main meta.json
 with open(OBJ_INFO, "w") as outfile:
     json.dump(meta, outfile, indent=4)
+
+# save each layer meta.json
+for i, LAYER in enumerate(LAYER_LIST):
+    with open(os.path.join(OBJ_OUTPUT, f'{LAYER:05d}', 'meta.json'), "w") as outfile:
+        json.dump(meta_list[i], outfile, indent=4)
 
 with open(f'{OBJ_OUTPUT}/.gitkeep', 'w'): pass
 
