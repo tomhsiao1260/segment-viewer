@@ -21,35 +21,63 @@ TILE_INFO       = './output/volume/meta.json'
 shutil.rmtree(TILE_OUTPUT, ignore_errors=True)
 os.makedirs(TILE_OUTPUT)
 
-image = Image.open(os.path.join(TIF_SMALL_INPUT, '00000.tif'))
-image.save(os.path.join(TILE_OUTPUT, '00000.png'))
+SPLIT = 10
+INTERVAL = 50
+LAYER_LIST = [ 0, INTERVAL, 2 * INTERVAL ]
 
-os.makedirs(os.path.join(TILE_OUTPUT, '00000'))
-image = Image.open(os.path.join(TIF_INPUT, '00000.tif'))
+# generate volume small image & each layer volume folder
+for LAYER in LAYER_LIST:
+    image = Image.open(os.path.join(TIF_SMALL_INPUT, f'{LAYER:05d}.tif'))
+    image.save(os.path.join(TILE_OUTPUT, f'{LAYER:05d}.png'))
+    os.makedirs(os.path.join(TILE_OUTPUT, f'{LAYER:05d}'))
 
-split = 10
-width, height = image.size
-
-w = width // split
-h = height // split
-
-info = {}
-info['id'] = '00000'
-info['clip'] = { 'x': 0, 'y': 0, 'z': 0, 'w': 8096, 'h': 7888, 'd': 1 }
-info['subclip'] = { 'w': w, 'h': h }
-
-VOLUME_LIST = []
-VOLUME_LIST.append(info)
-
-for i in range(split):
-    for j in range(split):
-        filename = f'cell_yxz_{j:03d}_{i:03d}_00000'
-        cropped_image = image.crop((w * i, h * j, w * (i+1), h * (j+1)))
-        cropped_image.save(os.path.join(TILE_OUTPUT, '00000', filename + '.png'))
-
-# save relevant info and copy to client
+# main meta.json
 meta = {}
-meta['volume'] = VOLUME_LIST
+meta['volume'] = []
+
+for i, LAYER in enumerate(LAYER_LIST):
+    print(f'processing {LAYER:05d} ... {i+1}/{len(LAYER_LIST)}')
+
+    info = {}
+    info['id'] = f'{LAYER:05d}'
+    info['clip'] = { 'x': 0, 'y': 0, 'z': LAYER, 'w': 8096, 'h': 7888, 'd': 1 }
+
+    meta['volume'].append(info)
+
+    image = Image.open(os.path.join(TIF_INPUT, f'{LAYER:05d}.tif'))
+    w = image.size[0] // SPLIT
+    h = image.size[1] // SPLIT
+
+    layerMeta = {}
+    layerMeta['split'] = SPLIT
+    layerMeta['layer'] = f'{LAYER:05d}'
+    layerMeta['volume'] = []
+
+    for j in range(SPLIT):
+        for k in range(SPLIT):
+            filename = f'cell_yxz_{k:03d}_{j:03d}_{LAYER:05d}.png'
+
+            left = w * j
+            top = h * k
+            right = w * (j+1)
+            bottom = h * (k+1)
+
+            if (j == SPLIT - 1): right = image.size[0]
+            if (k == SPLIT - 1): bottom = image.size[1]
+
+            cropped_image = image.crop((left, top, right, bottom))
+            cropped_image.save(os.path.join(TILE_OUTPUT, f'{LAYER:05d}', filename))
+
+            layerInfo = {}
+            layerInfo['idx'] = j
+            layerInfo['idy'] = k
+            layerInfo['name'] = filename
+            layerInfo['clip'] = { 'x': left, 'y': top, 'z': LAYER, 'w': (right - left), 'h': (bottom - top), 'd': 1 }
+
+            layerMeta['volume'].append(layerInfo)
+
+    with open(os.path.join(TILE_OUTPUT, f'{LAYER:05d}', 'meta.json'), "w") as outfile:
+        json.dump(layerMeta, outfile, indent=4)
 
 with open(TILE_INFO, "w") as outfile:
     json.dump(meta, outfile, indent=4)
