@@ -37,6 +37,19 @@ let gui
 function updateGUI(viewer) {
   if (gui) { gui.destroy() }
   gui = new GUI()
+  gui.add({ enhance: () => enhance(viewer) }, 'enhance')
+  gui.add(viewer.params, 'surface', 0, 10).onChange(viewer.render)
+}
+
+// enhance volume & segment
+async function enhance(viewer) {
+  const loadingDiv = document.querySelector('#loading')
+  if (loadingDiv) loadingDiv.style.display = 'inline'
+
+  await viewer.enhance()
+  viewer.render()
+
+  if (loadingDiv) loadingDiv.style.display = 'none'
 }
 
 // loading div element

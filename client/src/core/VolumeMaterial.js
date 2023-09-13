@@ -7,7 +7,7 @@ export class VolumeMaterial extends ShaderMaterial {
       side: BackSide,
 
       uniforms: {
-        utifPTexture : { value: null },
+        voldata : { value: null },
         cmdata : { value: null },
       },
 
@@ -22,7 +22,7 @@ export class VolumeMaterial extends ShaderMaterial {
 
       fragmentShader: /* glsl */ `
         varying vec2 vUv;
-        uniform sampler2D utifPTexture;
+        uniform sampler2D voldata;
         uniform sampler2D cmdata;
 
         vec4 apply_colormap(float val) {
@@ -31,9 +31,8 @@ export class VolumeMaterial extends ShaderMaterial {
         }
 
         void main() {
-          float intensity = texture2D(utifPTexture, vUv).r;
+          float intensity = texture2D(voldata, vUv).r;
           vec4 color = apply_colormap(intensity);
-          // color.a = 0.5;
 
           gl_FragColor = color;
           #include <colorspace_fragment>

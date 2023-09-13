@@ -32,9 +32,10 @@ export default class ViewerCore {
     this.cardS = null
     this.cardVList = []
     this.cardSList = []
+    this.enhanceList = []
 
     this.params = {}
-    this.params.surface = 0.003
+    this.params.surface = 7.5
     this.params.layer = 0
     this.params.layers = { select: 0, options: {} }
 
@@ -138,7 +139,10 @@ export default class ViewerCore {
     this.clipGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c_positions), 3))
     this.clipGeometry.userData.chunkList = chunkList
 
-    const [ sdfTex, bvh ] = this.sdfTexGenerate(this.clipGeometry)
+    const scaling = new THREE.Vector3(8096, 7888, 10)
+    const center = new THREE.Vector3(8096 / 2, 7888 / 2, 0)
+    const [ sdfTex, bvh ] = this.sdfTexGenerate(this.clipGeometry, center, scaling)
+
     const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
     const segmentSmallMaterial = new SegmentSmallMaterial()
     segmentSmallMaterial.uniforms.sdfTex.value = sdfTex.texture
@@ -180,18 +184,23 @@ export default class ViewerCore {
     this.focusGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
     this.focusGeometry.userData = q
 
-    const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry)
+    const scaling = new THREE.Vector3(8096, 7888, 10)
+    const center = new THREE.Vector3(8096 / 2, 7888 / 2, 0)
+    const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry, center, scaling)
     this.cardS.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
+
+    this.cardSList.forEach((card) => {
+      const { idx, idy } = card.userData
+      const scaling = new THREE.Vector3(8096/10, 7888/10, 10/10)
+      const center = new THREE.Vector3(8096/20 * (2*idx + 1), 7888/20 * (2*idy + 1), 0)
+      const [ sdfTexFocus, _ ] = this.sdfTexGenerate(this.focusGeometry, center, scaling)
+      card.material.uniforms.sdfTexFocus.value = sdfTexFocus.texture
+    })
   }
 
-  sdfTexGenerate(geometry) {
+  sdfTexGenerate(geometry, center, scaling) {
     const matrix = new THREE.Matrix4()
-    const center = new THREE.Vector3()
     const quat = new THREE.Quaternion()
-    const scaling = new THREE.Vector3()
-
-    scaling.set(8096, 7888, 10)
-    center.set(8096 / 2, 7888 / 2, 0)
     matrix.compose(center, quat, scaling)
 
     const bvh = new MeshBVH(geometry, { maxLeafTris: 1 })
@@ -245,61 +254,73 @@ export default class ViewerCore {
     }
   }
 
-  abc() {
-    // const gui = new GUI()
-    // gui.add({ enhance: generateTile }, 'enhance')
+  async enhance() {
+    const mouse = new THREE.Vector2()
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(mouse, this.camera)
+    const intersects = raycaster.intersectObjects([ this.cardV ])
+    if (!intersects.length) return
 
-    let clipGeometry, focusGeometry, bvhh, sdfTexx
+    const p = intersects[0].point
+    const c = intersects[0].object.userData
 
-    const geometryP = new THREE.PlaneGeometry(2 * (809/8096), 2 * (788/8096), 1, 1)
+    // x: 0~9 y: 0~9
+    const idx = Math.floor(10 * (p.x - c.center.x + 1) / 2)
+    const idy = Math.floor(10 * (p.y - c.center.y + 1) / 2)
 
-    function generateTile() {
-      const mouse = new THREE.Vector2()
-      const raycaster = new THREE.Raycaster()
-      raycaster.setFromCamera(mouse, this.camera)
-      const intersects = raycaster.intersectObjects([ this.cardV ])
-
-      if (!intersects.length) return
-
-      const p = intersects[0].point
-      const c = intersects[0].object.userData
-
-      // 0~9
-      const idx = Math.floor(10 * (p.x - c.center.x + 1) / 2)
-      const idy = Math.floor(10 * (p.y - c.center.y + 1) / 2)
-      const tifPTexture = new THREE.TextureLoader().loadAsync(`volume/00000/cell_yxz_00${idy}_00${idx}_00000.png`)
-
-      Promise.all([ meta, tifPTexture ]).then((res) => {
-        const [ meta, texture ] = res
-        const { id, clip, subclip } = meta.volume[0]
-
-        texture.magFilter = THREE.NearestFilter
-        texture.minFilter = THREE.LinearFilter
-
-        const x = c.center.x - c.w / 2 * 1.0 + (idx + 0.5) * geometryP.parameters.width
-        const y = c.center.y - c.h / 2 * (c.vh / c.vw) + (idy + 0.5) * geometryP.parameters.height
-
-        const volumeMaterial = new VolumeMaterial()
-        volumeMaterial.uniforms.cmdata.value = cmTexture
-
-        const cardP = new THREE.Mesh(geometryP, volumeMaterial)
-        cardP.position.set(x, y, -0.5)
-        scene.add(cardP)
-
-        cardP.material.uniforms.utifPTexture.value = texture
-
-        const segmentMaterial = new SegmentMaterial()
-        segmentSmallMaterial.uniforms.sdfTex.value = sdfTexx.texture
-
-        const cardPP = new THREE.Mesh(geometryP, segmentMaterial)
-        cardPP.position.set(x, y, -0.8)
-        // scene.add(cardPP)
-      })
+    // return if already exist
+    for (let i = 0; i < this.enhanceList.length; i++) {
+      const [ vx, vy ] = this.enhanceList[i]
+      if (idx === vx && idy === vy) return
     }
+    this.enhanceList.push([idx, idy])
+
+    const geometry = new THREE.PlaneGeometry(2 * (809 / 8096), 2 * (788 / 8096), 1, 1)
+    const x = c.center.x - c.w / 2 * 1.0 + (idx + 0.5) * geometry.parameters.width
+    const y = c.center.y - c.h / 2 * (c.vh / c.vw) + (idy + 0.5) * geometry.parameters.height
+
+    await this.enhanceVolume(geometry, x, y, idx, idy)
+    await this.enhanceSegment(geometry, x, y, idx, idy)
+  }
+
+  async enhanceVolume(geometry, x, y, idx, idy) {
+    const voldata = await Loader.getVolumeData(`00000/cell_yxz_00${idy}_00${idx}_00000.png`)
+    voldata.magFilter = THREE.NearestFilter
+    voldata.minFilter = THREE.LinearFilter
+
+    const volumeMaterial = new VolumeMaterial()
+    volumeMaterial.uniforms.cmdata.value = this.cmtexture
+    volumeMaterial.uniforms.voldata.value = voldata
+
+    const card = new THREE.Mesh(geometry, volumeMaterial)
+    card.position.set(x, y, -0.5)
+    card.userData = { idx, idy }
+
+    this.scene.add(card)
+    this.cardVList.push(card)
+  }
+
+  async enhanceSegment(geometry, x, y, idx, idy) {
+    const scaling = new THREE.Vector3(8096/10, 7888/10, 10/10)
+    const center = new THREE.Vector3(8096/20 * (2*idx + 1), 7888/20 * (2*idy + 1), 0)
+    const [ sdfTex, bvh ] = this.sdfTexGenerate(this.clipGeometry, center, scaling)
+
+    const segmentMaterial = new SegmentMaterial()
+    segmentMaterial.uniforms.sdfTex.value = sdfTex.texture
+
+    const card = new THREE.Mesh(geometry, segmentMaterial)
+    card.position.set(x, y, -0.85)
+    card.userData = { idx, idy }
+
+    this.scene.add(card)
+    this.cardSList.push(card)
   }
 
   render() {
     if (!this.renderer) return
+
+    this.cardS.material.uniforms.surface.value = this.params.surface
+    this.cardSList.forEach((card) => { card.material.uniforms.surface.value = this.params.surface })
     this.renderer.render(this.scene, this.camera)
   }
 }
