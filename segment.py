@@ -1,4 +1,5 @@
 import os
+import math
 import json
 import shutil
 import numpy as np
@@ -116,7 +117,11 @@ def clip_obj(data, layer):
 
 GAP = 5
 INTERVAL = 50
-LAYER_LIST = [ 0, INTERVAL, 2 * INTERVAL ]
+MAX_LAYER = 14370
+LAYER_LIST = []
+
+# for i in range(10): LAYER_LIST.append(i * INTERVAL)
+for i in range(int(MAX_LAYER / INTERVAL) + 1): LAYER_LIST.append(i * INTERVAL)
 
 # clear .obj output folder & generate layer id list
 shutil.rmtree(OBJ_OUTPUT, ignore_errors=True)
@@ -174,27 +179,33 @@ for i, SEGMENT_ID in enumerate(SEGMENT_LIST):
     c[c < 0] = 0
     b[b < 0] = 0
 
+    z_start = p_data['vertices'][0, 2]
+    z_end   = p_data['vertices'][-1, 2]
+
     info = {}
     info['id'] = SEGMENT_ID
     info['clip'] = {}
     info['clip']['x'] = int(c[0])
     info['clip']['y'] = int(c[1])
-    info['clip']['z'] = int(c[2])
+    info['clip']['z'] = int(z_start)
     info['clip']['w'] = int(b[0] - c[0])
     info['clip']['h'] = int(b[1] - c[1])
-    info['clip']['d'] = int(b[2] - c[2])
+    info['clip']['d'] = int(z_end - z_start)
     meta['segment'].append(info)
 
+    filename = os.path.join(os.path.join(OBJ_INPUT, SEGMENT_ID, f'{SEGMENT_ID}_points.obj'))
+    data = parse_obj(filename)
+
     for j, LAYER in enumerate(LAYER_LIST):
-        if (int(c[2]) - GAP >= LAYER or int(b[2]) + GAP <= LAYER): continue
+        if (int(z_start) - GAP >= LAYER or int(z_end) + GAP <= LAYER): continue
 
         selected_layer = LAYER
-        if (int(c[2]) > LAYER): selected_layer = int(c[2])
-        if (int(b[2]) < LAYER): selected_layer = int(b[2])
+        if (int(z_start) > LAYER): selected_layer = int(z_start)
+        if (int(z_end) < LAYER): selected_layer = int(z_end)
 
-        filename = os.path.join(os.path.join(OBJ_INPUT, SEGMENT_ID, f'{SEGMENT_ID}_points.obj'))
-        data = parse_obj(filename)
         p_data = clip_obj(data, selected_layer)
+        if (p_data['vertices'].shape[0] < 10): continue
+
         save_obj(os.path.join(OBJ_OUTPUT, f'{LAYER:05d}', f'{SEGMENT_ID}_{LAYER:05d}_points.obj'), p_data)
 
         info = {}
@@ -208,6 +219,7 @@ with open(OBJ_INFO, "w") as outfile:
     json.dump(meta, outfile, indent=4)
 
 # save each layer meta.json
+print('processing meta.json ...')
 for i, LAYER in enumerate(LAYER_LIST):
     with open(os.path.join(OBJ_OUTPUT, f'{LAYER:05d}', 'meta.json'), "w") as outfile:
         json.dump(meta_list[i], outfile, indent=4)

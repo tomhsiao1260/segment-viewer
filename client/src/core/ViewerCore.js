@@ -98,7 +98,7 @@ export default class ViewerCore {
     const index = this.params.layers.select
     const { id, clip } = this.volumeMeta.volume[index]
 
-    const volumeTex = await Loader.getVolumeData(`${id}.png`)
+    const volumeTex = await Loader.getVolumeData(`${id}.tif`)
     volumeTex.magFilter = THREE.NearestFilter
     volumeTex.minFilter = THREE.LinearFilter
 

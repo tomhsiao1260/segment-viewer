@@ -1,4 +1,4 @@
-import { TextureLoader } from 'three'
+import { TIFFLoader } from 'three/addons/loaders/TIFFLoader.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 
 export default class Loader {
@@ -13,7 +13,7 @@ export default class Loader {
 
   static getSubSegmentMeta(folder) { return fetch(`segment/${folder}/meta.json`).then((res) => res.json()) }
 
-  static getVolumeData(filename) { return new TextureLoader().loadAsync('volume/' + filename) }
+  static getVolumeData(filename) { return new TIFFLoader().loadAsync('volume/' + filename) }
 
   static getSegmentData(filename) { return new OBJLoader().loadAsync('segment/' + filename) }
 }

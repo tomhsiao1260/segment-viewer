@@ -23,12 +23,14 @@ os.makedirs(TILE_OUTPUT)
 
 SPLIT = 10
 INTERVAL = 50
-LAYER_LIST = [ 0, INTERVAL, 2 * INTERVAL ]
+LAYER_LIST = []
+
+for i in range(11): LAYER_LIST.append(i * INTERVAL)
 
 # generate volume small image & each layer volume folder
 for LAYER in LAYER_LIST:
     image = Image.open(os.path.join(TIF_SMALL_INPUT, f'{LAYER:05d}.tif'))
-    image.save(os.path.join(TILE_OUTPUT, f'{LAYER:05d}.png'))
+    image.save(os.path.join(TILE_OUTPUT, f'{LAYER:05d}.tif'))
     os.makedirs(os.path.join(TILE_OUTPUT, f'{LAYER:05d}'))
 
 # main meta.json
@@ -55,7 +57,7 @@ for i, LAYER in enumerate(LAYER_LIST):
 
     for j in range(SPLIT):
         for k in range(SPLIT):
-            filename = f'cell_yxz_{k:03d}_{j:03d}_{LAYER:05d}.png'
+            filename = f'cell_yxz_{k:03d}_{j:03d}_{LAYER:05d}.tif'
 
             left = w * j
             top = h * k
