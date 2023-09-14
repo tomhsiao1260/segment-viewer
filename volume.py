@@ -23,9 +23,11 @@ os.makedirs(TILE_OUTPUT)
 
 SPLIT = 10
 INTERVAL = 50
+MAX_LAYER = 14370
 LAYER_LIST = []
 
-for i in range(11): LAYER_LIST.append(i * INTERVAL)
+# for i in range(11): LAYER_LIST.append(i * INTERVAL)
+for i in range(int(MAX_LAYER / INTERVAL) + 1): LAYER_LIST.append(i * INTERVAL)
 
 # generate volume small image & each layer volume folder
 for LAYER in LAYER_LIST:

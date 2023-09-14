@@ -357,7 +357,7 @@ export default class ViewerCore {
   }
 
   render() {
-    if (!this.renderer) return
+    if (!this.renderer || !this.card) return
 
     this.card.material.uniforms.surface.value = this.params.surface
     this.cardList.forEach((card) => { card.material.uniforms.surface.value = this.params.surface })
