@@ -89,9 +89,6 @@ export default class ViewerCore {
     }
   }
 
-  clear() {
-  }
-
   async updateVolume() {
     if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
 
@@ -169,7 +166,6 @@ export default class ViewerCore {
     this.card.material.uniforms.sdfTex.value = sdfTex.texture
 
     if (this.bvh) {
-      if (this.bvh.geometry.userData.id === id) return
       this.bvh.geometry.dispose()
       this.bvh.geometry = null
       this.bvh = null
@@ -242,6 +238,7 @@ export default class ViewerCore {
 
     this.renderer.setRenderTarget(sdfTex)
     generateSdfPass.render(this.renderer)
+    generateSdfPass.material.dispose()
     this.renderer.setRenderTarget(null)
 
     return [ sdfTex, bvh ]
@@ -365,5 +362,41 @@ export default class ViewerCore {
     this.card.material.uniforms.surface.value = this.params.surface
     this.cardList.forEach((card) => { card.material.uniforms.surface.value = this.params.surface })
     this.renderer.render(this.scene, this.camera)
+  }
+
+  clear() {
+    if (this.bvh) { this.bvh.geometry.dispose(); this.bvh.geometry = null }
+    if (this.clipGeometry) { this.clipGeometry.dispose(); this.clipGeometry = null }
+    if (this.focusGeometry) { this.focusGeometry.dispose(); this.focusGeometry = null }
+
+    if (this.card) {
+      const { voldata, sdfTex, sdfTexFocus } = this.card.material.uniforms
+      if (voldata.value) { voldata.value.dispose(); voldata.value = null }
+      if (sdfTex.value) { sdfTex.value.dispose(); sdfTex.value = null }
+      if (sdfTexFocus.value) { sdfTexFocus.value.dispose(); sdfTexFocus.value = null }
+
+      this.card.geometry.dispose()
+      this.card.material.dispose()
+      this.card.geometry = null
+      this.card.material = null
+      this.scene.remove(this.card)
+    }
+
+    this.cardList.forEach((card) => {
+      const { voldata, sdfTex, sdfTexFocus } = card.material.uniforms
+      if (voldata.value) { voldata.value.dispose(); voldata.value = null }
+      if (sdfTex.value) { sdfTex.value.dispose(); sdfTex.value = null }
+      if (sdfTexFocus.value) { sdfTexFocus.value.dispose(); sdfTexFocus.value = null }
+
+      card.geometry.dispose()
+      card.material.dispose()
+      card.geometry = null
+      card.material = null
+      this.scene.remove(card)
+    })
+
+    this.bvh = null
+    this.card = null
+    this.cardList = []
   }
 }

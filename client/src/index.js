@@ -25,8 +25,11 @@ async function updateViewer(viewer) {
   const loadingDiv = document.querySelector('#loading')
   if (loadingDiv) loadingDiv.style.display = 'inline'
 
+  viewer.clear()
+
   await viewer.updateVolume()
   await viewer.clipSegment()
+
   viewer.render()
 
   if (loadingDiv) loadingDiv.style.display = 'none'
@@ -39,6 +42,7 @@ function updateGUI(viewer) {
   gui = new GUI()
   gui.add({ enhance: () => enhance(viewer) }, 'enhance')
   gui.add(viewer.params, 'surface', 0, 10).onChange(viewer.render)
+  gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').onChange(() => updateViewer(viewer))
 }
 
 // enhance volume & segment
