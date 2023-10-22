@@ -84,7 +84,7 @@ export default class ViewerCore {
 
     // list all layer options
     for (let i = 0; i < this.volumeMeta.volume.length; i++) {
-      const { id } = this.volumeMeta.volume[i]
+      const id = parseInt(this.volumeMeta.volume[i].id)
       this.params.layers.options[ id ] = i
     }
   }
