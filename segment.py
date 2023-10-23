@@ -136,7 +136,7 @@ SEGMENT_LIST = []
 if (OBJ_INPUT != ''):
     subfolders = [f.path for f in os.scandir(OBJ_INPUT) if f.is_dir()]
 
-    for subfolder in subfolders:
+    for subfolder in sorted(subfolders):
         folder_name = os.path.basename(subfolder)
         obj_path = os.path.join(subfolder, folder_name + '.obj')
         obj_points_path = os.path.join(subfolder, folder_name + '_points.obj')
