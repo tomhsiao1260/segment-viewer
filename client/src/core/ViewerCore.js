@@ -95,13 +95,21 @@ export default class ViewerCore {
     }
   }
 
+  getClipInfo(sID) {
+    for (let i = 0; i < this.segmentMeta.segment.length; i++) {
+      const { id, clip } = this.segmentMeta.segment[i]
+
+      if (sID === id) return { id, clip } 
+    }
+  }
+
   async updateVolume(trigger) {
     if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
 
     if (trigger === 'segment') {
-      const indexs = this.params.segments.select
-      const { id, clip } = this.segmentMeta.segment[indexs]
-      this.params.layers.select = Math.floor(clip.z / 50)
+      const index = this.params.segments.select
+      const { id, clip } = this.segmentMeta.segment[index]
+      this.params.layers.select = Math.ceil(clip.z / 50)
     }
 
     const index = this.params.layers.select
@@ -130,7 +138,8 @@ export default class ViewerCore {
     const layer = this.segmentMeta.layer[index]
 
     this.subSegmentMeta = await Loader.getSubSegmentMeta(layer)
-    this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
+    // this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
+    if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
 
     await this.updateClipGeometry()
     await this.updateFocusGeometry()

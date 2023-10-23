@@ -40,10 +40,25 @@ let gui
 function updateGUI(viewer) {
   if (gui) { gui.destroy() }
   gui = new GUI()
-  gui.add({ enhance: () => enhance(viewer) }, 'enhance')
-  gui.add(viewer.params, 'surface', 0, 10).onChange(viewer.render)
   gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer, 'layer'))
-  gui.add(viewer.params.segments, 'select', viewer.params.segments.options).name('segments').onChange(() => updateViewer(viewer, 'segment'))
+  gui.add(viewer.params.segments, 'select', viewer.params.segments.options).name('segments').listen().onChange(async() => {
+    for (let [ sID, v ] of Object.entries(viewer.params.segments.options)) {
+      if (viewer.params.segments.select === v) {
+        viewer.focusSegmentID = sID
+        await updateViewer(viewer, 'segment')
+
+        const labelDiv = document.querySelector('#label')
+        const { id, clip } = viewer.getClipInfo(sID)
+        labelDiv.style.display = 'inline'
+        labelDiv.style.left = '50%'
+        labelDiv.style.top = '50%'
+        labelDiv.innerHTML = `${id}<br>layer: ${clip.z}~${clip.z+clip.d}`
+        return
+      }
+    }
+  })
+  gui.add(viewer.params, 'surface', 0, 10).name('thickness').onChange(viewer.render)
+  gui.add({ enhance: () => enhance(viewer) }, 'enhance')
 }
 
 // enhance volume & segment
@@ -94,6 +109,13 @@ function labeling(viewer) {
     // as well as these lines
     viewer.updateFocusGeometry()
     viewer.render()
+
+    for (let [ sID, v ] of Object.entries(viewer.params.segments.options)) {
+      if (sID === id) {
+        viewer.params.segments.select = v
+        return
+      }
+    }
   })
 }
 
