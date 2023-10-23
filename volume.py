@@ -25,28 +25,33 @@ SPLIT = 10
 INTERVAL = 50
 MAX_LAYER = 14370
 LAYER_LIST = []
+SUBLAYER_LIST = []
 
-# for i in range(11): LAYER_LIST.append(i * INTERVAL)
 for i in range(int(MAX_LAYER / INTERVAL) + 1): LAYER_LIST.append(i * INTERVAL)
-
-# generate volume small image & each layer volume folder
-for LAYER in LAYER_LIST:
-    image = Image.open(os.path.join(TIF_SMALL_INPUT, f'{LAYER:05d}.tif'))
-    image.save(os.path.join(TILE_OUTPUT, f'{LAYER:05d}.tif'))
-    os.makedirs(os.path.join(TILE_OUTPUT, f'{LAYER:05d}'))
+for i in range(11): SUBLAYER_LIST.append(i * INTERVAL)
+# for i in range(int(MAX_LAYER / INTERVAL) + 1): SUBLAYER_LIST.append(i * INTERVAL)
 
 # main meta.json
 meta = {}
 meta['volume'] = []
 
-for i, LAYER in enumerate(LAYER_LIST):
-    print(f'processing {LAYER:05d} ... {i+1}/{len(LAYER_LIST)}')
+# generate volume small image & meta.json
+for LAYER in LAYER_LIST:
+    image = Image.open(os.path.join(TIF_SMALL_INPUT, f'{LAYER:05d}.tif'))
+    image.save(os.path.join(TILE_OUTPUT, f'{LAYER:05d}.tif'))
 
     info = {}
     info['id'] = f'{LAYER:05d}'
     info['clip'] = { 'x': 0, 'y': 0, 'z': LAYER, 'w': 8096, 'h': 7888, 'd': 1 }
-
     meta['volume'].append(info)
+
+with open(TILE_INFO, "w") as outfile:
+    json.dump(meta, outfile, indent=4)
+
+# generate cropped volume image & each layer volume folder & meta.json
+for i, LAYER in enumerate(SUBLAYER_LIST):
+    os.makedirs(os.path.join(TILE_OUTPUT, f'{LAYER:05d}'))
+    print(f'processing {LAYER:05d} ... {i+1}/{len(SUBLAYER_LIST)}')
 
     image = Image.open(os.path.join(TIF_INPUT, f'{LAYER:05d}.tif'))
     w = image.size[0] // SPLIT
@@ -82,9 +87,6 @@ for i, LAYER in enumerate(LAYER_LIST):
 
     with open(os.path.join(TILE_OUTPUT, f'{LAYER:05d}', 'meta.json'), "w") as outfile:
         json.dump(layerMeta, outfile, indent=4)
-
-with open(TILE_INFO, "w") as outfile:
-    json.dump(meta, outfile, indent=4)
 
 with open(f'{TILE_OUTPUT}/.gitkeep', 'w'): pass
 

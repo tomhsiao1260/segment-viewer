@@ -17,17 +17,17 @@ async function init() {
 }
 
 function update(viewer) {
-  updateViewer(viewer)
+  updateViewer(viewer, 'layer')
   updateGUI(viewer)
 }
 
-async function updateViewer(viewer) {
+async function updateViewer(viewer, trigger) {
   const loadingDiv = document.querySelector('#loading')
   if (loadingDiv) loadingDiv.style.display = 'inline'
 
   viewer.clear()
 
-  await viewer.updateVolume()
+  await viewer.updateVolume(trigger)
   await viewer.clipSegment()
 
   viewer.render()
@@ -42,7 +42,8 @@ function updateGUI(viewer) {
   gui = new GUI()
   gui.add({ enhance: () => enhance(viewer) }, 'enhance')
   gui.add(viewer.params, 'surface', 0, 10).onChange(viewer.render)
-  gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').onChange(() => updateViewer(viewer))
+  gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer, 'layer'))
+  gui.add(viewer.params.segments, 'select', viewer.params.segments.options).name('segments').onChange(() => updateViewer(viewer, 'segment'))
 }
 
 // enhance volume & segment

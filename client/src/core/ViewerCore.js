@@ -33,8 +33,8 @@ export default class ViewerCore {
 
     this.params = {}
     this.params.surface = 7.5
-    this.params.layer = 0
     this.params.layers = { select: 0, options: {} }
+    this.params.segments = { select: 0, options: {} }
 
     this.init()
   }
@@ -87,10 +87,22 @@ export default class ViewerCore {
       const id = parseInt(this.volumeMeta.volume[i].id)
       this.params.layers.options[ id ] = i
     }
+
+    // list all segment options
+    for (let i = 0; i < this.segmentMeta.segment.length; i++) {
+      const id = this.segmentMeta.segment[i].id
+      this.params.segments.options[ id ] = i
+    }
   }
 
-  async updateVolume() {
+  async updateVolume(trigger) {
     if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
+
+    if (trigger === 'segment') {
+      const indexs = this.params.segments.select
+      const { id, clip } = this.segmentMeta.segment[indexs]
+      this.params.layers.select = Math.floor(clip.z / 50)
+    }
 
     const index = this.params.layers.select
     const { id, clip } = this.volumeMeta.volume[index]
