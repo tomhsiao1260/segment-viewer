@@ -10,6 +10,7 @@ export class LayerMaterial extends ShaderMaterial {
         surface : { value: 10.0 },
         volumeAspect : { value: 810 / 789 },
         screenAspect : { value: 2 / 2 },
+        colorBool : { value: true },
         voldata : { value: null },
         cmdata : { value: null },
         sdfTex : { value: null },
@@ -30,6 +31,7 @@ export class LayerMaterial extends ShaderMaterial {
         uniform float surface;
         uniform float volumeAspect;
         uniform float screenAspect;
+        uniform bool colorBool;
         uniform sampler2D sdfTex;
         uniform sampler2D sdfTexFocus;
         uniform sampler2D voldata;
@@ -48,7 +50,7 @@ export class LayerMaterial extends ShaderMaterial {
           float dist = texture2D(sdfTex, vec2(uv.x, 1.0 - uv.y)).r - surface;
           float intensity = texture2D(voldata, uv).r;
 
-          vec4 color = apply_colormap(intensity);
+          vec4 color = colorBool ? apply_colormap(intensity) : vec4(vec3(intensity), 1.0);
           gl_FragColor = color;
 
           bool s = dist < 0.0 && dist > -surface;
@@ -56,6 +58,8 @@ export class LayerMaterial extends ShaderMaterial {
 
           float f_dist = texture(sdfTexFocus, vec2(uv.x, 1.0 - uv.y)).r - surface;
           if (f_dist > -surface + 1e-6 && f_dist < 0.0 && dist < 0.0) gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+
+          if (!colorBool) return;
           #include <colorspace_fragment>
         }
       `,

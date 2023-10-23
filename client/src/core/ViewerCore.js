@@ -33,6 +33,7 @@ export default class ViewerCore {
 
     this.params = {}
     this.params.surface = 7.5
+    this.params.colorBool = true
     this.params.layers = { select: 0, options: {} }
     this.params.segments = { select: 0, options: {} }
 
@@ -381,7 +382,12 @@ export default class ViewerCore {
     if (!this.renderer || !this.card) return
 
     this.card.material.uniforms.surface.value = this.params.surface
-    this.cardList.forEach((card) => { card.material.uniforms.surface.value = this.params.surface })
+    this.card.material.uniforms.colorBool.value = this.params.colorBool
+    this.cardList.forEach((card) => {
+      card.material.uniforms.surface.value = this.params.surface
+      card.material.uniforms.colorBool.value = this.params.colorBool
+    })
+
     this.renderer.render(this.scene, this.camera)
   }
 
