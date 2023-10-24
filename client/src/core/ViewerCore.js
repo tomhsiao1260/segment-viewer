@@ -94,6 +94,13 @@ export default class ViewerCore {
       const id = this.segmentMeta.segment[i].id
       this.params.segments.options[ id ] = i
     }
+
+    // get url query params info
+    const url = new URLSearchParams(window.location.search)
+    if (url.get('x')) this.camera.position.x = parseFloat(url.get('x'))
+    if (url.get('y')) this.camera.position.y = parseFloat(url.get('y'))
+    if (url.get('zoom')) this.camera.zoom = parseFloat(url.get('zoom'))
+    this.camera.updateProjectionMatrix()
   }
 
   getClipInfo(sID) {
@@ -380,6 +387,16 @@ export default class ViewerCore {
 
   render() {
     if (!this.renderer || !this.card) return
+
+    const url = new URL(window.location.href)
+
+    const searchParams = url.searchParams
+    searchParams.set('x', this.camera.position.x.toFixed(3))
+    searchParams.set('y', this.camera.position.y.toFixed(3))
+    searchParams.set('zoom', this.camera.zoom.toFixed(3))
+    url.search = searchParams.toString()
+
+    window.history.pushState({ path: url.href }, '', url.href)
 
     this.card.material.uniforms.surface.value = this.params.surface
     this.card.material.uniforms.colorBool.value = this.params.colorBool
