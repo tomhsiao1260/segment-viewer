@@ -175,8 +175,8 @@ export default class ViewerCore {
     const layer = this.segmentMeta.layer[index]
 
     this.subSegmentMeta = await Loader.getSubSegmentMeta(layer)
-    // this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
-    if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
+    this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
+    // if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
 
     await this.updateClipGeometry()
     await this.updateFocusGeometry()
@@ -340,28 +340,33 @@ export default class ViewerCore {
     }
   }
 
-  async enhance() {
-    const mouse = new THREE.Vector2()
-    const raycaster = new THREE.Raycaster()
-    raycaster.setFromCamera(mouse, this.camera)
-    const intersects = raycaster.intersectObjects([ this.card ])
-    if (!intersects.length) return
-
-    const p = intersects[0].point
-    const c = intersects[0].object.userData
+  needEnhance() {
+    const p = this.camera.position
+    const c = this.card.userData
 
     // x: 0~9 y: 0~9
     const { split } = this.subVolumeMeta
     const idx = Math.floor(split * ((p.x - c.center.x) / (c.w * 1.0) + 0.5))
     const idy = Math.floor(split * ((p.y - c.center.y) / (c.h * (c.vh / c.vw)) + 0.5))
 
+    // return if zoom too small
+    if (this.camera.zoom < 10.0) return
+    // return if out of boundary
+    if (idx < 0 || idx > 9 || idy < 0 || idy > 9) return
     // return if already exist
     for (let i = 0; i < this.cardList.length; i++) {
       const { idx: vx, idy: vy } = this.cardList[i].userData
       if (idx === vx && idy === vy) return
     }
 
+    return { idx, idy }
+  }
+
+  async enhance(idx, idy) {
     const info = {}
+    const p = this.camera.position
+    const c = this.card.userData
+
     this.subVolumeMeta.volume.forEach(({ idx: vx, idy: vy, name, clip }) => {
       if (idx === vx && idy === vy) { info.name = name; info.clip = clip }
     })

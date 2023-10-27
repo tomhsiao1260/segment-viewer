@@ -10,7 +10,8 @@ async function init() {
   const segmentMeta = await Loader.getSegmentMeta()
 
   const viewer = new ViewerCore({ volumeMeta, segmentMeta })
-  viewer.controls.addEventListener('change', () => { viewer.render() })
+  viewer.controls.addEventListener('change', () => { enhance(viewer) })
+  // viewer.controls.addEventListener('change', () => { viewer.render() })
 
   loading()
   update(viewer)
@@ -38,7 +39,8 @@ async function updateViewer(viewer, trigger) {
   await viewer.updateVolume(trigger)
   await viewer.clipSegment()
 
-  viewer.render()
+  enhance(viewer)
+  // viewer.render()
 
   if (loadingDiv) loadingDiv.style.display = 'none'
 }
@@ -73,15 +75,19 @@ function updateGUI(viewer) {
   })
   gui.add(viewer.params, 'surface', 0, 10).name('thickness').onChange(viewer.render)
   gui.add(viewer.params, 'colorBool').name('color').onChange(viewer.render)
-  gui.add({ enhance: () => enhance(viewer) }, 'enhance')
+  // gui.add({ enhance: () => enhance(viewer) }, 'enhance')
 }
 
 // enhance volume & segment
 async function enhance(viewer) {
+  const enhanceID = viewer.needEnhance()
+  if (!enhanceID) { viewer.render(); return; }
+
   const loadingDiv = document.querySelector('#loading')
   if (loadingDiv) loadingDiv.style.display = 'inline'
 
-  await viewer.enhance()
+  const { idx, idy } = enhanceID
+  await viewer.enhance(idx, idy)
   viewer.render()
 
   if (loadingDiv) loadingDiv.style.display = 'none'
