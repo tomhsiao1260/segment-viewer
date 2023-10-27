@@ -95,10 +95,19 @@ export default class ViewerCore {
       this.params.segments.getID[ i ] = id
     }
 
+    this.camera.position.x = 2.0
+    this.camera.position.y = 1.0
+
     // set state via url params
     const url = new URLSearchParams(window.location.search)
-    if (url.get('x')) this.camera.position.x = parseFloat(url.get('x'))
-    if (url.get('y')) this.camera.position.y = parseFloat(url.get('y'))
+    // still don't know why it works, but the order does matter
+    if (url.get('x') && url.get('y')) {
+      const x = parseFloat(url.get('x'))
+      const y = parseFloat(url.get('y'))
+      this.controls.target = new THREE.Vector3(x, y, 0)
+      this.camera.position.x = x
+      this.camera.position.y = y
+    }
     if (url.get('zoom')) this.camera.zoom = parseFloat(url.get('zoom'))
     if (url.get('layer')) this.params.layers.select = this.params.layers.options[ url.get('layer') ]
     if (url.get('segment')) this.params.segments.select = this.params.segments.options[ url.get('segment') ]
