@@ -33,7 +33,7 @@ export default class ViewerCore {
     this.params = {}
     this.params.surface = 7.5
     this.params.colorBool = true
-    this.params.layers = { select: 0, options: {} }
+    this.params.layers = { select: 0, options: {}, getLayer: {} }
     this.params.segments = { select: 0, options: {}, getID: {} }
 
     this.init()
@@ -85,6 +85,7 @@ export default class ViewerCore {
     for (let i = 0; i < this.volumeMeta.volume.length; i++) {
       const id = parseInt(this.volumeMeta.volume[i].id)
       this.params.layers.options[ id ] = i
+      this.params.layers.getLayer[ i ] = id
     }
 
     // list all segment options
@@ -99,6 +100,7 @@ export default class ViewerCore {
     if (url.get('x')) this.camera.position.x = parseFloat(url.get('x'))
     if (url.get('y')) this.camera.position.y = parseFloat(url.get('y'))
     if (url.get('zoom')) this.camera.zoom = parseFloat(url.get('zoom'))
+    if (url.get('layer')) this.params.layers.select = this.params.layers.options[ url.get('layer') ]
     if (url.get('segment')) this.params.segments.select = this.params.segments.options[ url.get('segment') ]
     this.camera.updateProjectionMatrix()
   }
@@ -146,8 +148,8 @@ export default class ViewerCore {
     const layer = this.segmentMeta.layer[index]
 
     this.subSegmentMeta = await Loader.getSubSegmentMeta(layer)
-    // this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
-    if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
+    this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
+    // if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
 
     await this.updateClipGeometry()
     await this.updateFocusGeometry()
@@ -276,6 +278,11 @@ export default class ViewerCore {
   }
 
   getLabel(mouse) {
+    if (!mouse) {
+      const { id, clip } = this.segmentMeta.segment[ this.params.segments.select ]
+      return { id, clip }
+    }
+
     const raycaster = new THREE.Raycaster()
     raycaster.setFromCamera(mouse, this.camera)
     const intersects = raycaster.intersectObjects([ this.card ])
@@ -392,6 +399,7 @@ export default class ViewerCore {
     searchParams.set('x', this.camera.position.x.toFixed(3))
     searchParams.set('y', this.camera.position.y.toFixed(3))
     searchParams.set('zoom', this.camera.zoom.toFixed(3))
+    searchParams.set('layer', this.params.layers.getLayer[ this.params.layers.select ])
     searchParams.set('segment', this.params.segments.getID[ this.params.segments.select ])
     url.search = searchParams.toString()
 

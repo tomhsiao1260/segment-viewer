@@ -28,8 +28,8 @@ LAYER_LIST = []
 SUBLAYER_LIST = []
 
 for i in range(int(MAX_LAYER / INTERVAL) + 1): LAYER_LIST.append(i * INTERVAL)
-for i in range(11): SUBLAYER_LIST.append(i * INTERVAL)
-# for i in range(int(MAX_LAYER / INTERVAL) + 1): SUBLAYER_LIST.append(i * INTERVAL)
+# for i in range(11): SUBLAYER_LIST.append(i * INTERVAL)
+for i in range(int(MAX_LAYER / INTERVAL) + 1): SUBLAYER_LIST.append(i * INTERVAL)
 
 # main meta.json
 meta = {}

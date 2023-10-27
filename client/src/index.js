@@ -15,6 +15,13 @@ async function init() {
   loading()
   update(viewer)
   labeling(viewer)
+
+  const { id, clip } = viewer.getLabel()
+  const labelDiv = document.querySelector('#label')
+  labelDiv.style.display = 'inline'
+  labelDiv.style.left = '50%'
+  labelDiv.style.top = '50%'
+  labelDiv.innerHTML = `${id}<br>layer: ${clip.z}~${clip.z+clip.d}`
 }
 
 function update(viewer) {
@@ -90,6 +97,7 @@ function labeling(viewer) {
     mouse.x = e.clientX / window.innerWidth * 2 - 1
     mouse.y = - (e.clientY / window.innerHeight) * 2 + 1
 
+    const labelDiv = document.querySelector('#label')
     labelDiv.style.display = 'none'
 
     const loadingDiv = document.querySelector('#loading')
