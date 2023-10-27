@@ -16,6 +16,7 @@ export default class ViewerCore {
     this.renderer = null
     this.scene = null
     this.camera = null
+    this.controls = null
     this.cmtexture = null
     this.clipGeometry = null
     this.focusGeometry = null
@@ -72,12 +73,11 @@ export default class ViewerCore {
       false
     )
 
-    const controls = new OrbitControls(this.camera, this.canvas)
-    controls.enableDamping = false
-    controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
-    controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
-    controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }
-    controls.addEventListener('change', this.render)
+    this.controls = new OrbitControls(this.camera, this.canvas)
+    this.controls.enableDamping = false
+    this.controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
+    this.controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
+    this.controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }
 
     this.cmtexture = new THREE.TextureLoader().load(textureViridis)
     this.cmtexture.minFilter = THREE.NearestFilter
@@ -94,13 +94,6 @@ export default class ViewerCore {
       const id = this.segmentMeta.segment[i].id
       this.params.segments.options[ id ] = i
     }
-
-    // get url query params info
-    const url = new URLSearchParams(window.location.search)
-    if (url.get('x')) this.camera.position.x = parseFloat(url.get('x'))
-    if (url.get('y')) this.camera.position.y = parseFloat(url.get('y'))
-    if (url.get('zoom')) this.camera.zoom = parseFloat(url.get('zoom'))
-    this.camera.updateProjectionMatrix()
   }
 
   getClipInfo(sID) {
@@ -109,6 +102,30 @@ export default class ViewerCore {
 
       if (sID === id) return { id, clip } 
     }
+  }
+
+  getCoordinate() {
+    const mouse = new THREE.Vector2()
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(mouse, this.camera)
+    const intersects = raycaster.intersectObjects([ this.card ])
+    if (!intersects.length) return
+
+    const p = intersects[0].point
+    const c = intersects[0].object.userData
+
+    // x: 0~9 y: 0~9
+    const { split } = this.subVolumeMeta
+    const idx = Math.floor(split * ((p.x - c.center.x) / (c.w * 1.0) + 0.5))
+    const idy = Math.floor(split * ((p.y - c.center.y) / (c.h * (c.vh / c.vw)) + 0.5))
+
+    // return false if already exist
+    for (let i = 0; i < this.cardList.length; i++) {
+      const { idx: vx, idy: vy } = this.cardList[i].userData
+      if (idx === vx && idy === vy) return false
+    }
+
+    return true
   }
 
   async updateVolume(trigger) {
@@ -307,6 +324,30 @@ export default class ViewerCore {
     }
   }
 
+  needEnhance() {
+    const mouse = new THREE.Vector2()
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(mouse, this.camera)
+    const intersects = raycaster.intersectObjects([ this.card ])
+    if (!intersects.length) return
+
+    const p = intersects[0].point
+    const c = intersects[0].object.userData
+
+    // x: 0~9 y: 0~9
+    const { split } = this.subVolumeMeta
+    const idx = Math.floor(split * ((p.x - c.center.x) / (c.w * 1.0) + 0.5))
+    const idy = Math.floor(split * ((p.y - c.center.y) / (c.h * (c.vh / c.vw)) + 0.5))
+
+    // return false if already exist
+    for (let i = 0; i < this.cardList.length; i++) {
+      const { idx: vx, idy: vy } = this.cardList[i].userData
+      if (idx === vx && idy === vy) return false
+    }
+
+    return true
+  }
+
   async enhance() {
     const mouse = new THREE.Vector2()
     const raycaster = new THREE.Raycaster()
@@ -387,16 +428,6 @@ export default class ViewerCore {
 
   render() {
     if (!this.renderer || !this.card) return
-
-    const url = new URL(window.location.href)
-
-    const searchParams = url.searchParams
-    searchParams.set('x', this.camera.position.x.toFixed(3))
-    searchParams.set('y', this.camera.position.y.toFixed(3))
-    searchParams.set('zoom', this.camera.zoom.toFixed(3))
-    url.search = searchParams.toString()
-
-    window.history.pushState({ path: url.href }, '', url.href)
 
     this.card.material.uniforms.surface.value = this.params.surface
     this.card.material.uniforms.colorBool.value = this.params.colorBool
