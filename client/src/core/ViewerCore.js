@@ -95,9 +95,6 @@ export default class ViewerCore {
       this.params.segments.getID[ i ] = id
     }
 
-    this.camera.position.x = 2.0
-    this.camera.position.y = 1.0
-
     // set state via url params
     const url = new URLSearchParams(window.location.search)
     if (url.get('zoom')) this.camera.zoom = parseFloat(url.get('zoom'))
@@ -178,8 +175,8 @@ export default class ViewerCore {
     const layer = this.segmentMeta.layer[index]
 
     this.subSegmentMeta = await Loader.getSubSegmentMeta(layer)
-    this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
-    // if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
+    // this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
+    if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
 
     await this.updateClipGeometry()
     await this.updateFocusGeometry()

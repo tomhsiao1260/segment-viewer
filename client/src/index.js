@@ -73,7 +73,7 @@ function updateGUI(viewer) {
   })
   gui.add(viewer.params, 'surface', 0, 10).name('thickness').onChange(viewer.render)
   gui.add(viewer.params, 'colorBool').name('color').onChange(viewer.render)
-  // gui.add({ enhance: () => enhance(viewer) }, 'enhance')
+  gui.add({ enhance: () => enhance(viewer) }, 'enhance')
 }
 
 // enhance volume & segment
