@@ -51,11 +51,21 @@ function updateGUI(viewer) {
   gui.title('2023/10/24')
   gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer, 'layer'))
   gui.add(viewer.params.segments, 'select', viewer.params.segments.options).name('segments').listen().onChange(async() => {
+    const sID = viewer.params.segments.getID[ viewer.params.segments.select ]
+    const { id, clip } = viewer.getClipInfo(sID)
+
+    // move to the segment
+    const pixelX = clip.x + clip.w / 2
+    const pixelY = clip.y + clip.h / 2
+    const { x, y } = viewer.pixelTocameraPosition(pixelX, pixelY)
+    viewer.controls.target = new THREE.Vector3(x, y, 0)
+    viewer.camera.position.x = x
+    viewer.camera.position.y = y
+    viewer.camera.zoom = 2.5
+
     await updateViewer(viewer, 'segment')
 
     const labelDiv = document.querySelector('#label')
-    const sID = viewer.params.segments.getID[ viewer.params.segments.select ]
-    const { id, clip } = viewer.getClipInfo(sID)
     labelDiv.style.display = 'inline'
     labelDiv.style.left = '50%'
     labelDiv.style.top = '50%'
