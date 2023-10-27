@@ -16,11 +16,9 @@ export default class ViewerCore {
     this.renderer = null
     this.scene = null
     this.camera = null
-    this.controls = null
     this.cmtexture = null
     this.clipGeometry = null
     this.focusGeometry = null
-    this.focusSegmentID = null
     this.subVolumeMeta = null
     this.subSegmentMeta = null
 
@@ -36,7 +34,7 @@ export default class ViewerCore {
     this.params.surface = 7.5
     this.params.colorBool = true
     this.params.layers = { select: 0, options: {} }
-    this.params.segments = { select: 0, options: {} }
+    this.params.segments = { select: 0, options: {}, getID: {} }
 
     this.init()
   }
@@ -93,7 +91,16 @@ export default class ViewerCore {
     for (let i = 0; i < this.segmentMeta.segment.length; i++) {
       const id = this.segmentMeta.segment[i].id
       this.params.segments.options[ id ] = i
+      this.params.segments.getID[ i ] = id
     }
+
+    // set state via url params
+    const url = new URLSearchParams(window.location.search)
+    if (url.get('x')) this.camera.position.x = parseFloat(url.get('x'))
+    if (url.get('y')) this.camera.position.y = parseFloat(url.get('y'))
+    if (url.get('zoom')) this.camera.zoom = parseFloat(url.get('zoom'))
+    if (url.get('segment')) this.params.segments.select = this.params.segments.options[ url.get('segment') ]
+    this.camera.updateProjectionMatrix()
   }
 
   getClipInfo(sID) {
@@ -102,30 +109,6 @@ export default class ViewerCore {
 
       if (sID === id) return { id, clip } 
     }
-  }
-
-  getCoordinate() {
-    const mouse = new THREE.Vector2()
-    const raycaster = new THREE.Raycaster()
-    raycaster.setFromCamera(mouse, this.camera)
-    const intersects = raycaster.intersectObjects([ this.card ])
-    if (!intersects.length) return
-
-    const p = intersects[0].point
-    const c = intersects[0].object.userData
-
-    // x: 0~9 y: 0~9
-    const { split } = this.subVolumeMeta
-    const idx = Math.floor(split * ((p.x - c.center.x) / (c.w * 1.0) + 0.5))
-    const idy = Math.floor(split * ((p.y - c.center.y) / (c.h * (c.vh / c.vw)) + 0.5))
-
-    // return false if already exist
-    for (let i = 0; i < this.cardList.length; i++) {
-      const { idx: vx, idy: vy } = this.cardList[i].userData
-      if (idx === vx && idy === vy) return false
-    }
-
-    return true
   }
 
   async updateVolume(trigger) {
@@ -222,9 +205,11 @@ export default class ViewerCore {
   updateFocusGeometry() {
     const q = { start: 0, end: 0, sID: null, vID: null }
     const { chunkList } = this.clipGeometry.userData
+    const focusSegmentID = this.params.segments.getID[this.params.segments.select]
+
     for (let i = 0; i < chunkList.length; i += 1) {
       const { id: sID } = chunkList[i]
-      if (sID === this.focusSegmentID) {
+      if (sID === focusSegmentID) {
         q.sID = sID
         q.vID = this.params.layers.select
         q.end = chunkList[i].maxIndex
@@ -317,35 +302,8 @@ export default class ViewerCore {
 
     for (let i = 0; i < chunkList.length; i ++) {
       const { id: sID, clip, maxIndex } = chunkList[i]
-      if (maxIndex > hitIndex) {
-        this.focusSegmentID = sID
-        return { id: sID, clip } 
-      }
+      if (maxIndex > hitIndex) { return { id: sID, clip } }
     }
-  }
-
-  needEnhance() {
-    const mouse = new THREE.Vector2()
-    const raycaster = new THREE.Raycaster()
-    raycaster.setFromCamera(mouse, this.camera)
-    const intersects = raycaster.intersectObjects([ this.card ])
-    if (!intersects.length) return
-
-    const p = intersects[0].point
-    const c = intersects[0].object.userData
-
-    // x: 0~9 y: 0~9
-    const { split } = this.subVolumeMeta
-    const idx = Math.floor(split * ((p.x - c.center.x) / (c.w * 1.0) + 0.5))
-    const idy = Math.floor(split * ((p.y - c.center.y) / (c.h * (c.vh / c.vw)) + 0.5))
-
-    // return false if already exist
-    for (let i = 0; i < this.cardList.length; i++) {
-      const { idx: vx, idy: vy } = this.cardList[i].userData
-      if (idx === vx && idy === vy) return false
-    }
-
-    return true
   }
 
   async enhance() {
@@ -428,6 +386,16 @@ export default class ViewerCore {
 
   render() {
     if (!this.renderer || !this.card) return
+
+    const url = new URL(window.location.href)
+    const searchParams = url.searchParams
+    searchParams.set('x', this.camera.position.x.toFixed(3))
+    searchParams.set('y', this.camera.position.y.toFixed(3))
+    searchParams.set('zoom', this.camera.zoom.toFixed(3))
+    searchParams.set('segment', this.params.segments.getID[ this.params.segments.select ])
+    url.search = searchParams.toString()
+
+    window.history.pushState({ path: url.href }, '', url.href)
 
     this.card.material.uniforms.surface.value = this.params.surface
     this.card.material.uniforms.colorBool.value = this.params.colorBool
