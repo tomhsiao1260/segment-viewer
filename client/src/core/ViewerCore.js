@@ -100,17 +100,18 @@ export default class ViewerCore {
 
     // set state via url params
     const url = new URLSearchParams(window.location.search)
-    // still don't know why it works, but the order does matter
+    if (url.get('zoom')) this.camera.zoom = parseFloat(url.get('zoom'))
+    if (url.get('layer')) this.params.layers.select = this.params.layers.options[ url.get('layer') ]
+    if (url.get('segment')) this.params.segments.select = this.params.segments.options[ url.get('segment') ]
     if (url.get('x') && url.get('y')) {
-      const x = parseFloat(url.get('x'))
-      const y = parseFloat(url.get('y'))
+      const pixelX = parseFloat(url.get('x'))
+      const pixelY = parseFloat(url.get('y'))
+      const { x, y } = this.pixelTocameraPosition(pixelX, pixelY)
+      // still don't know why it works, but the order does matter
       this.controls.target = new THREE.Vector3(x, y, 0)
       this.camera.position.x = x
       this.camera.position.y = y
     }
-    if (url.get('zoom')) this.camera.zoom = parseFloat(url.get('zoom'))
-    if (url.get('layer')) this.params.layers.select = this.params.layers.options[ url.get('layer') ]
-    if (url.get('segment')) this.params.segments.select = this.params.segments.options[ url.get('segment') ]
     this.camera.updateProjectionMatrix()
   }
 
@@ -120,6 +121,26 @@ export default class ViewerCore {
 
       if (sID === id) return { id, clip } 
     }
+  }
+
+  cameraPositionToPixel(x, y) {
+    const { clip } = this.volumeMeta.volume[0]
+    const plane = { w: 2, h: 2 }
+
+    const pixelX = clip.w / 2 * x + clip.w / 2
+    const pixelY = clip.w / 2 * y + clip.h / 2
+
+    return { x: pixelX, y: pixelY }
+  }
+
+  pixelTocameraPosition(x, y) {
+    const { clip } = this.volumeMeta.volume[0]
+    const plane = { w: 2, h: 2 }
+
+    const cameraX = 2 / clip.w * (x - clip.w / 2)
+    const cameraY = 2 / clip.w * (y - clip.h / 2)
+
+    return { x: cameraX, y: cameraY }
   }
 
   async updateVolume(trigger) {
@@ -403,10 +424,12 @@ export default class ViewerCore {
   render() {
     if (!this.renderer || !this.card) return
 
+    const { x, y } = this.cameraPositionToPixel(this.camera.position.x, this.camera.position.y)
+
     const url = new URL(window.location.href)
     const searchParams = url.searchParams
-    searchParams.set('x', this.camera.position.x.toFixed(3))
-    searchParams.set('y', this.camera.position.y.toFixed(3))
+    searchParams.set('x', x.toFixed(0))
+    searchParams.set('y', y.toFixed(0))
     searchParams.set('zoom', this.camera.zoom.toFixed(3))
     searchParams.set('layer', this.params.layers.getLayer[ this.params.layers.select ])
     searchParams.set('segment', this.params.segments.getID[ this.params.segments.select ])

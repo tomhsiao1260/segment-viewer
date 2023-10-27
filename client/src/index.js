@@ -49,7 +49,6 @@ function updateGUI(viewer) {
   if (gui) { gui.destroy() }
   gui = new GUI()
   gui.title('2023/10/24')
-  gui.add(viewer.params, 'colorBool').name('color').onChange(viewer.render)
   gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer, 'layer'))
   gui.add(viewer.params.segments, 'select', viewer.params.segments.options).name('segments').listen().onChange(async() => {
     await updateViewer(viewer, 'segment')
@@ -63,6 +62,7 @@ function updateGUI(viewer) {
     labelDiv.innerHTML = `${id}<br>layer: ${clip.z}~${clip.z+clip.d}`
   })
   gui.add(viewer.params, 'surface', 0, 10).name('thickness').onChange(viewer.render)
+  gui.add(viewer.params, 'colorBool').name('color').onChange(viewer.render)
   // gui.add({ enhance: () => enhance(viewer) }, 'enhance')
 }
 
