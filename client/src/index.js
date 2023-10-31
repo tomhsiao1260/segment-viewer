@@ -10,10 +10,8 @@ async function init() {
   const segmentMeta = await Loader.getSegmentMeta()
 
   const viewer = new ViewerCore({ volumeMeta, segmentMeta })
-  viewer.controls.addEventListener('change', () => { enhance(viewer) })
-  // viewer.controls.addEventListener('change', () => { viewer.render() })
 
-  loading()
+  loading(viewer)
   update(viewer)
   labeling(viewer)
 
@@ -26,23 +24,18 @@ async function init() {
 }
 
 function update(viewer) {
-  updateViewer(viewer, 'layer')
+  updateViewer(viewer)
   updateGUI(viewer)
 }
 
-async function updateViewer(viewer, trigger) {
-  const loadingDiv = document.querySelector('#loading')
-  if (loadingDiv) loadingDiv.style.display = 'inline'
+async function updateViewer(viewer) {
+  viewer.loading = true
 
-  viewer.clear()
+  const mode = viewer.params.mode.select
+  if (mode === 'layer') { await modeA(viewer) }
+  if (mode === 'segment') { await modeB(viewer) }
 
-  await viewer.updateVolume(trigger)
-  await viewer.clipSegment()
-
-  enhance(viewer)
-  // viewer.render()
-
-  if (loadingDiv) loadingDiv.style.display = 'none'
+  viewer.loading = false
 }
 
 let gui
@@ -50,8 +43,9 @@ let gui
 function updateGUI(viewer) {
   if (gui) { gui.destroy() }
   gui = new GUI()
-  gui.title('2023/10/24')
-  gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer, 'layer'))
+  gui.title('2023/11/03')
+  gui.add(viewer.params.mode, 'select', viewer.params.mode.options).name('mode').onChange(() => updateViewer(viewer))
+  gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer))
   gui.add(viewer.params.segments, 'select', viewer.params.segments.options).name('segments').listen().onChange(async() => {
     const sID = viewer.params.segments.getID[ viewer.params.segments.select ]
     const { id, clip } = viewer.getClipInfo(sID)
@@ -64,6 +58,7 @@ function updateGUI(viewer) {
     viewer.camera.position.x = x
     viewer.camera.position.y = y
     viewer.camera.zoom = 2.5
+    viewer.camera.updateProjectionMatrix()
 
     await updateViewer(viewer, 'segment')
 
@@ -75,30 +70,31 @@ function updateGUI(viewer) {
   })
   gui.add(viewer.params, 'surface', 0, 10).name('thickness').onChange(viewer.render)
   gui.add(viewer.params, 'colorBool').name('color').onChange(viewer.render)
-  // gui.add({ enhance: () => enhance(viewer) }, 'enhance')
 }
 
-// enhance volume & segment
-async function enhance(viewer) {
-  const enhanceID = viewer.needEnhance()
-  if (!enhanceID) { viewer.render(); return; }
-
-  const loadingDiv = document.querySelector('#loading')
-  if (loadingDiv) loadingDiv.style.display = 'inline'
-
-  const { idx, idy } = enhanceID
-  await viewer.enhance(idx, idy)
+async function modeA(viewer) {
+  viewer.clear()
+  await viewer.updateVolume()
+  await viewer.clipSegment()
   viewer.render()
+}
 
-  if (loadingDiv) loadingDiv.style.display = 'none'
+async function modeB(viewer) {
+  viewer.clear()
+  await viewer.updateSegment()
+  viewer.render()
 }
 
 // loading div element
-function loading() {
+function loading(viewer) {
   const loadingDiv = document.createElement('div')
   loadingDiv.id = 'loading'
   loadingDiv.innerHTML = 'Loading ...'
   document.body.appendChild(loadingDiv)
+
+  window.setInterval(() => {
+    loadingDiv.style.display = viewer.loading ? 'inline' : 'none'
+  }, 500)
 }
 
 // segment labeling

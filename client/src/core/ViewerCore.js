@@ -12,6 +12,7 @@ import { GenerateSDFMaterial } from './GenerateSDFMaterial'
 
 export default class ViewerCore {
   constructor({ volumeMeta, segmentMeta }) {
+    this.loading = false
     this.bvh = null
     this.renderer = null
     this.scene = null
@@ -33,6 +34,7 @@ export default class ViewerCore {
     this.params = {}
     this.params.surface = 7.5
     this.params.colorBool = true
+    this.params.mode = { select: 'layer', options: [ 'layer', 'segment' ] }
     this.params.layers = { select: 0, options: {}, getLayer: {} }
     this.params.segments = { select: 0, options: {}, getID: {} }
 
@@ -76,6 +78,7 @@ export default class ViewerCore {
     this.controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
     this.controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
     this.controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }
+    this.controls.addEventListener('change', this.render)
 
     this.cmtexture = new THREE.TextureLoader().load(textureViridis)
     this.cmtexture.minFilter = THREE.NearestFilter
@@ -140,31 +143,34 @@ export default class ViewerCore {
     return { x: cameraX, y: cameraY }
   }
 
-  async updateVolume(trigger) {
+  async updateSegment() {
+    console.log('hi')
+  }
+
+  async updateVolume() {
     if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
 
-    if (trigger === 'segment') {
-      const index = this.params.segments.select
-      const { id, clip } = this.segmentMeta.segment[index]
-      this.params.layers.select = Math.ceil(clip.z / 50)
-    }
+    const { segments, layers } = this.params
+    const { id: sID, clip: sClip } = this.segmentMeta.segment[segments.select]
 
-    const index = this.params.layers.select
-    const { id, clip } = this.volumeMeta.volume[index]
+    const needUpdate = layers.select < Math.ceil(sClip.z / 50) || layers.select > Math.ceil((sClip.z + sClip.d) / 50)
+    layers.select = needUpdate ? Math.ceil(sClip.z / 50) : layers.select
 
-    const volumeTex = await Loader.getVolumeData(`${id}.tif`)
+    const { id: vID, clip: vClip } = this.volumeMeta.volume[layers.select]
+
+    const volumeTex = await Loader.getVolumeData(`${vID}.tif`)
     volumeTex.magFilter = THREE.NearestFilter
     volumeTex.minFilter = THREE.LinearFilter
 
     const geometry = new THREE.PlaneGeometry(2, 2, 1, 1)
     const layerMaterial = new LayerMaterial()
-    layerMaterial.uniforms.volumeAspect.value = clip.w / clip.h
+    layerMaterial.uniforms.volumeAspect.value = vClip.w / vClip.h
     layerMaterial.uniforms.screenAspect.value = 2 / 2
     layerMaterial.uniforms.voldata.value = volumeTex
     layerMaterial.uniforms.cmdata.value = this.cmtexture
 
     this.card = new THREE.Mesh(geometry, layerMaterial)
-    this.card.userData = { w: 2, h: 2, vw: clip.w, vh: clip.h, center: new THREE.Vector3() }
+    this.card.userData = { w: 2, h: 2, vw: vClip.w, vh: vClip.h, center: new THREE.Vector3() }
     this.scene.add(this.card)
   }
 
@@ -175,8 +181,8 @@ export default class ViewerCore {
     const layer = this.segmentMeta.layer[index]
 
     this.subSegmentMeta = await Loader.getSubSegmentMeta(layer)
-    this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
-    // if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
+    // this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
+    if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
 
     await this.updateClipGeometry()
     await this.updateFocusGeometry()
@@ -340,7 +346,22 @@ export default class ViewerCore {
     }
   }
 
+  async enhance() {
+    const enhanceID = this.needEnhance()
+    if (!enhanceID) return
+
+    this.loading = true
+
+    const { idx, idy } = enhanceID
+    await this.renderEnhance(idx, idy)
+
+    this.loading = false
+  }
+
   needEnhance() {
+    // return if zoom too small
+    if (this.camera.zoom < 10.0) return
+
     const p = this.camera.position
     const c = this.card.userData
 
@@ -349,20 +370,19 @@ export default class ViewerCore {
     const idx = Math.floor(split * ((p.x - c.center.x) / (c.w * 1.0) + 0.5))
     const idy = Math.floor(split * ((p.y - c.center.y) / (c.h * (c.vh / c.vw)) + 0.5))
 
-    // return if zoom too small
-    if (this.camera.zoom < 10.0) return
-    // return if out of boundary
-    if (idx < 0 || idx > 9 || idy < 0 || idy > 9) return
     // return if already exist
     for (let i = 0; i < this.cardList.length; i++) {
       const { idx: vx, idy: vy } = this.cardList[i].userData
       if (idx === vx && idy === vy) return
     }
+    // return if out of boundary
+    if (idx < 0 || idx > 9 || idy < 0 || idy > 9) return
 
     return { idx, idy }
   }
 
-  async enhance(idx, idy) {
+  // enhance volume & segment in layer mode
+  async renderEnhance(idx, idy) {
     const info = {}
     const p = this.camera.position
     const c = this.card.userData
@@ -392,6 +412,9 @@ export default class ViewerCore {
 
     await this.enhanceVolume(card)
     await this.enhanceSegment(card)
+    console.log('hi')
+
+    this.render()
   }
 
   async enhanceVolume(card) {
@@ -445,6 +468,8 @@ export default class ViewerCore {
       card.material.uniforms.surface.value = this.params.surface
       card.material.uniforms.colorBool.value = this.params.colorBool
     })
+
+    if (this.params.mode.select === 'layer') this.enhance()
 
     this.renderer.render(this.scene, this.camera)
   }
