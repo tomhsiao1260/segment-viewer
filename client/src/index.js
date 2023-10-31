@@ -74,6 +74,7 @@ function updateGUI(viewer) {
 
 async function modeA(viewer) {
   viewer.clear()
+  viewer.updateControls()
   await viewer.updateVolume()
   await viewer.clipSegment()
   viewer.render()
@@ -81,6 +82,7 @@ async function modeA(viewer) {
 
 async function modeB(viewer) {
   viewer.clear()
+  viewer.updateControls()
   await viewer.updateSegment()
   viewer.render()
 }
@@ -106,6 +108,8 @@ function labeling(viewer) {
 
   window.addEventListener('mousedown', (e) => {
     if (!(e.target instanceof HTMLCanvasElement)) return
+    if (viewer.params.mode.select !== 'layer') return
+
     mouse.x = e.clientX / window.innerWidth * 2 - 1
     mouse.y = - (e.clientY / window.innerHeight) * 2 + 1
 
