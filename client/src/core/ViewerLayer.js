@@ -10,11 +10,10 @@ import { LayerMaterial } from './LayerMaterial'
 import { LayerEnhanceMaterial } from './LayerEnhanceMaterial'
 import { GenerateSDFMaterial } from './GenerateSDFMaterial'
 
-export default class ViewerCore {
-  constructor({ volumeMeta, segmentMeta }) {
+export default class ViewerLayer {
+  constructor({ params, volumeMeta, segmentMeta, renderer, canvas }) {
     this.loading = false
     this.bvh = null
-    this.renderer = null
     this.scene = null
     this.camera = null
     this.cmtexture = null
@@ -23,32 +22,26 @@ export default class ViewerCore {
     this.subVolumeMeta = null
     this.subSegmentMeta = null
 
+    this.canvas = canvas
+    this.renderer = renderer
     this.volumeMeta = volumeMeta
     this.segmentMeta = segmentMeta
     this.render = this.render.bind(this)
-    this.canvas = document.querySelector('.webgl')
+
+    this.params = {}
+    this.params.mode = 'layer'
+    this.params.layers = params.layers
+    this.params.segments = params.segments
+    this.params.surface = 7.5
+    this.params.colorBool = true
 
     this.card = null
     this.cardList = []
-
-    this.params = {}
-    this.params.surface = 7.5
-    this.params.colorBool = true
-    this.params.mode = { select: 'layer', options: [ 'layer', 'segment' ] }
-    this.params.layers = { select: 0, options: {}, getLayer: {} }
-    this.params.segments = { select: 0, options: {}, getID: {} }
 
     this.init()
   }
 
   init() {
-    // renderer setup
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, canvas: this.canvas })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    this.renderer.setSize(window.innerWidth, window.innerHeight)
-    this.renderer.setClearColor(0, 0)
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace
-
     // scene setup
     this.scene = new THREE.Scene()
 
@@ -74,25 +67,15 @@ export default class ViewerCore {
     )
 
     this.controls = new OrbitControls(this.camera, this.canvas)
+    this.controls.enableDamping = false
+    this.controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
+    this.controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
+    this.controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }
     this.controls.addEventListener('change', this.render)
 
     this.cmtexture = new THREE.TextureLoader().load(textureViridis)
     this.cmtexture.minFilter = THREE.NearestFilter
     this.cmtexture.magFilter = THREE.NearestFilter
-
-    // list all layer options
-    for (let i = 0; i < this.volumeMeta.volume.length; i++) {
-      const id = parseInt(this.volumeMeta.volume[i].id)
-      this.params.layers.options[ id ] = i
-      this.params.layers.getLayer[ i ] = id
-    }
-
-    // list all segment options
-    for (let i = 0; i < this.segmentMeta.segment.length; i++) {
-      const id = this.segmentMeta.segment[i].id
-      this.params.segments.options[ id ] = i
-      this.params.segments.getID[ i ] = id
-    }
 
     // set state via url params
     const url = new URLSearchParams(window.location.search)
@@ -139,37 +122,11 @@ export default class ViewerCore {
     return { x: cameraX, y: cameraY }
   }
 
-  updateControls() {
-    if (this.params.mode.select === 'layer') {
-      this.controls.enableDamping = false
-      this.controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
-      this.controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
-      this.controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }
-    }
-    if (this.params.mode.select === 'segment') {
-      this.controls.enableDamping = false
-      this.controls.screenSpacePanning = true
-      this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN }
-      this.controls.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN }
-    }
-  }
-
-  async updateSegment() {
-    const geometry = new THREE.BoxGeometry(1, 1, 1)
-    const material = new THREE.MeshBasicMaterial()
-    this.segmentMesh = new THREE.Mesh(geometry, material)
-    this.scene.add(this.segmentMesh)
-  }
-
   async updateVolume() {
     if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
 
     const { segments, layers } = this.params
     const { id: sID, clip: sClip } = this.segmentMeta.segment[segments.select]
-
-    const needUpdate = layers.select < Math.ceil(sClip.z / 50) || layers.select > Math.ceil((sClip.z + sClip.d) / 50)
-    layers.select = needUpdate ? Math.ceil(sClip.z / 50) : layers.select
-
     const { id: vID, clip: vClip } = this.volumeMeta.volume[layers.select]
 
     const volumeTex = await Loader.getVolumeData(`${vID}.tif`)
@@ -460,33 +417,29 @@ export default class ViewerCore {
   }
 
   render() {
-    if (!this.renderer) return
+    if (!this.renderer || !this.card) return
 
-    if (this.params.mode.select === 'layer') {
-      if (!this.card) return
-      const { x, y } = this.cameraPositionToPixel(this.camera.position.x, this.camera.position.y)
+    const { x, y } = this.cameraPositionToPixel(this.camera.position.x, this.camera.position.y)
 
-      const url = new URL(window.location.href)
-      const searchParams = url.searchParams
-      searchParams.set('x', x.toFixed(0))
-      searchParams.set('y', y.toFixed(0))
-      searchParams.set('zoom', this.camera.zoom.toFixed(3))
-      searchParams.set('layer', this.params.layers.getLayer[ this.params.layers.select ])
-      searchParams.set('segment', this.params.segments.getID[ this.params.segments.select ])
-      url.search = searchParams.toString()
+    const url = new URL(window.location.href)
+    const searchParams = url.searchParams
+    searchParams.set('x', x.toFixed(0))
+    searchParams.set('y', y.toFixed(0))
+    searchParams.set('zoom', this.camera.zoom.toFixed(3))
+    searchParams.set('layer', this.params.layers.getLayer[ this.params.layers.select ])
+    searchParams.set('segment', this.params.segments.getID[ this.params.segments.select ])
+    url.search = searchParams.toString()
 
-      window.history.pushState({ path: url.href }, '', url.href)
+    window.history.pushState({ path: url.href }, '', url.href)
 
-      this.card.material.uniforms.surface.value = this.params.surface
-      this.card.material.uniforms.colorBool.value = this.params.colorBool
-      this.cardList.forEach((card) => {
-        card.material.uniforms.surface.value = this.params.surface
-        card.material.uniforms.colorBool.value = this.params.colorBool
-      })
+    this.card.material.uniforms.surface.value = this.params.surface
+    this.card.material.uniforms.colorBool.value = this.params.colorBool
+    this.cardList.forEach((card) => {
+      card.material.uniforms.surface.value = this.params.surface
+      card.material.uniforms.colorBool.value = this.params.colorBool
+    })
 
-      this.enhance()
-    }
-
+    this.enhance()
     this.renderer.render(this.scene, this.camera)
   }
 
@@ -508,14 +461,6 @@ export default class ViewerCore {
       this.scene.remove(this.card)
     }
 
-    if (this.segmentMesh) {
-      this.segmentMesh.geometry.dispose()
-      this.segmentMesh.material.dispose()
-      this.segmentMesh.geometry = null
-      this.segmentMesh.material = null
-      this.scene.remove(this.segmentMesh)
-    }
-
     this.cardList.forEach((card) => {
       const { voldata, sdfTex, sdfTexFocus } = card.material.uniforms
       if (voldata.value) { voldata.value.dispose(); voldata.value = null }
@@ -532,7 +477,5 @@ export default class ViewerCore {
     this.bvh = null
     this.card = null
     this.cardList = []
-
-    this.segmentMesh = null
   }
 }

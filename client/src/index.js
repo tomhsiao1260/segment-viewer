@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import Loader from './Loader'
-import ViewerCore from './core/ViewerCore'
+import ViewerLayer from './core/ViewerLayer'
+import ViewerSegment from './core/ViewerSegment'
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min'
 
 init()
@@ -8,87 +9,131 @@ init()
 async function init() {
   const volumeMeta = await Loader.getVolumeMeta()
   const segmentMeta = await Loader.getSegmentMeta()
+  const params = setParams(volumeMeta, segmentMeta)
 
-  const viewer = new ViewerCore({ volumeMeta, segmentMeta })
+  // renderer setup
+  const canvas = document.querySelector('.webgl')
+  const renderer = new THREE.WebGLRenderer({ antialias: true, canvas: canvas })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setSize(window.innerWidth, window.innerHeight)
+  renderer.setClearColor(0, 0)
+  renderer.outputColorSpace = THREE.SRGBColorSpace
 
-  loading(viewer)
-  update(viewer)
-  labeling(viewer)
+  const vLayer = new ViewerLayer({ params, volumeMeta, segmentMeta, renderer, canvas })
+  const vSegment = new ViewerSegment({ params, volumeMeta, segmentMeta, renderer, canvas })
 
-  const { id, clip } = viewer.getLabel()
+  const viewerList = { select: 'layer', options: { 'layer': vLayer, 'segment': vSegment } }
+  setMode(viewerList)
+
+  setLoading(vLayer)
+  setLabeling(vLayer)
+}
+
+function setMode(viewerList) {
+  const mode = viewerList.select
+  const viewer = viewerList.options[mode]
+
   const labelDiv = document.querySelector('#label')
-  labelDiv.style.display = 'inline'
-  labelDiv.style.left = '50%'
-  labelDiv.style.top = '50%'
-  labelDiv.innerHTML = `${id}<br>layer: ${clip.z}~${clip.z+clip.d}`
+  if (labelDiv) labelDiv.style.display = 'none'
+
+  viewerList.options.layer.controls.enabled = false
+  viewerList.options.segment.controls.enabled = false
+  viewer.controls.enabled = true
+
+  if (mode === 'layer') updateViewer(viewer, 'layer')
+  if (mode === 'segment') updateViewer(viewer, 'segment')
+
+  updateGUI(viewerList)
 }
 
-function update(viewer) {
-  updateViewer(viewer)
-  updateGUI(viewer)
+function setParams(volumeMeta, segmentMeta) {
+  const params = {}
+  params.layers = { select: 0, options: {}, getLayer: {} }
+  params.segments = { select: 0, options: {}, getID: {} }
+
+  // list all layer options
+  for (let i = 0; i < volumeMeta.volume.length; i++) {
+    const id = parseInt(volumeMeta.volume[i].id)
+    params.layers.options[ id ] = i
+    params.layers.getLayer[ i ] = id
+  }
+  // list all segment options
+  for (let i = 0; i < segmentMeta.segment.length; i++) {
+    const id = segmentMeta.segment[i].id
+    params.segments.options[ id ] = i
+    params.segments.getID[ i ] = id
+  }
+
+  return params
 }
 
-async function updateViewer(viewer) {
-  viewer.loading = true
-
-  const mode = viewer.params.mode.select
-  if (mode === 'layer') { await modeA(viewer) }
-  if (mode === 'segment') { await modeB(viewer) }
-
-  viewer.loading = false
+async function updateViewer(viewer, mode) {
+  if (mode === 'layer') {
+    viewer.loading = true
+    viewer.clear()
+    await viewer.updateVolume()
+    await viewer.clipSegment()
+    viewer.render()
+    viewer.loading = false
+  }
+  if (mode === 'segment') {
+    viewer.clear()
+    await viewer.updateSegment()
+    viewer.render()
+  }
 }
 
 let gui
 
-function updateGUI(viewer) {
+function updateGUI(viewerList) {
+  const mode = viewerList.select
+  const viewer = viewerList.options[mode]
+
   if (gui) { gui.destroy() }
+
   gui = new GUI()
   gui.title('2023/11/03')
-  gui.add(viewer.params.mode, 'select', viewer.params.mode.options).name('mode').onChange(() => updateViewer(viewer))
-  gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer))
-  gui.add(viewer.params.segments, 'select', viewer.params.segments.options).name('segments').listen().onChange(async() => {
-    const sID = viewer.params.segments.getID[ viewer.params.segments.select ]
-    const { id, clip } = viewer.getClipInfo(sID)
-
-    // move to the segment
-    const pixelX = clip.x + clip.w / 2
-    const pixelY = clip.y + clip.h / 2
-    const { x, y } = viewer.pixelTocameraPosition(pixelX, pixelY)
-    viewer.controls.target = new THREE.Vector3(x, y, 0)
-    viewer.camera.position.x = x
-    viewer.camera.position.y = y
-    viewer.camera.zoom = 2.5
-    viewer.camera.updateProjectionMatrix()
-
-    await updateViewer(viewer, 'segment')
-
-    const labelDiv = document.querySelector('#label')
-    labelDiv.style.display = 'inline'
-    labelDiv.style.left = '50%'
-    labelDiv.style.top = '50%'
-    labelDiv.innerHTML = `${id}<br>layer: ${clip.z}~${clip.z+clip.d}`
+  gui.add({ select: mode }, 'select', [ 'layer', 'segment' ]).name('mode').onChange((mode) => {
+    console.log(mode)
+    viewerList.select = mode
+    setMode(viewerList)
   })
-  gui.add(viewer.params, 'surface', 0, 10).name('thickness').onChange(viewer.render)
-  gui.add(viewer.params, 'colorBool').name('color').onChange(viewer.render)
-}
 
-async function modeA(viewer) {
-  viewer.clear()
-  viewer.updateControls()
-  await viewer.updateVolume()
-  await viewer.clipSegment()
-  viewer.render()
-}
+  if (mode === 'layer') {
+    gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer, 'layer'))
+    gui.add(viewer.params.segments, 'select', viewer.params.segments.options).name('segments').listen().onChange(async() => {
+      const sID = viewer.params.segments.getID[ viewer.params.segments.select ]
+      const { id, clip } = viewer.getClipInfo(sID)
 
-async function modeB(viewer) {
-  viewer.clear()
-  viewer.updateControls()
-  await viewer.updateSegment()
-  viewer.render()
+      // move to the segment
+      const pixelX = clip.x + clip.w / 2
+      const pixelY = clip.y + clip.h / 2
+      const { x, y } = viewer.pixelTocameraPosition(pixelX, pixelY)
+      viewer.controls.target = new THREE.Vector3(x, y, 0)
+      viewer.camera.position.x = x
+      viewer.camera.position.y = y
+      viewer.camera.zoom = 2.5
+      viewer.camera.updateProjectionMatrix()
+
+      viewer.params.layers.select = Math.ceil(clip.z / 50)
+      await updateViewer(viewer, 'layer')
+
+      const labelDiv = document.querySelector('#label')
+      labelDiv.style.display = 'inline'
+      labelDiv.style.left = '50%'
+      labelDiv.style.top = '50%'
+      labelDiv.innerHTML = `${id}<br>layer: ${clip.z}~${clip.z+clip.d}`
+    })
+    gui.add(viewer.params, 'surface', 0, 10).name('thickness').onChange(viewer.render)
+    gui.add(viewer.params, 'colorBool').name('color').onChange(viewer.render)
+  }
+
+  if (mode === 'segment') {
+  }
 }
 
 // loading div element
-function loading(viewer) {
+function setLoading(viewer) {
   const loadingDiv = document.createElement('div')
   loadingDiv.id = 'loading'
   loadingDiv.innerHTML = 'Loading ...'
@@ -100,24 +145,30 @@ function loading(viewer) {
 }
 
 // segment labeling
-function labeling(viewer) {
+function setLabeling(viewer) {
   const mouse = new THREE.Vector2()
   const labelDiv = document.createElement('div')
   labelDiv.id = 'label'
   document.body.appendChild(labelDiv)
 
+  const { id, clip } = viewer.getLabel()
+  labelDiv.style.display = 'inline'
+  labelDiv.style.left = '50%'
+  labelDiv.style.top = '50%'
+  labelDiv.innerHTML = `${id}<br>layer: ${clip.z}~${clip.z+clip.d}`
+
   window.addEventListener('mousedown', (e) => {
     if (!(e.target instanceof HTMLCanvasElement)) return
-    if (viewer.params.mode.select !== 'layer') return
+    if (viewer.params.mode !== 'layer') return
 
     mouse.x = e.clientX / window.innerWidth * 2 - 1
     mouse.y = - (e.clientY / window.innerHeight) * 2 + 1
 
-    const labelDiv = document.querySelector('#label')
-    labelDiv.style.display = 'none'
-
     const loadingDiv = document.querySelector('#loading')
     if (loadingDiv.style.display === 'inline') return
+
+    const labelDiv = document.querySelector('#label')
+    if (labelDiv) labelDiv.style.display = 'none'
 
     // only this line is important
     const sTarget = viewer.getLabel(mouse)
