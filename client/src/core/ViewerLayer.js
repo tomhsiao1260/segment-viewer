@@ -11,7 +11,7 @@ import { LayerEnhanceMaterial } from './LayerEnhanceMaterial'
 import { GenerateSDFMaterial } from './GenerateSDFMaterial'
 
 export default class ViewerLayer {
-  constructor({ params, volumeMeta, segmentMeta, renderer, canvas }) {
+  constructor({ params, renderer, canvas }) {
     this.loading = false
     this.bvh = null
     this.scene = null
@@ -25,8 +25,8 @@ export default class ViewerLayer {
 
     this.canvas = canvas
     this.renderer = renderer
-    this.volumeMeta = volumeMeta
-    this.segmentMeta = segmentMeta
+    this.volumeMeta = params.layers.volumeMeta
+    this.segmentMeta = params.segments.segmentMeta
     this.render = this.render.bind(this)
 
     this.params = {}
@@ -62,7 +62,7 @@ export default class ViewerLayer {
         this.camera.bottom = -1
         this.camera.updateProjectionMatrix()
         this.renderer.setSize(window.innerWidth, window.innerHeight)
-        if (this.controls.enabled) this.render()
+        this.render()
       },
       false
     )
@@ -427,7 +427,7 @@ export default class ViewerLayer {
   }
 
   render() {
-    if (!this.renderer || !this.card) return
+    if (!this.renderer || !this.card || this.controlDOM.style.display  !== 'inline') return
 
     const { x, y } = this.cameraPositionToPixel(this.camera.position.x, this.camera.position.y)
 

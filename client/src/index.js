@@ -9,7 +9,8 @@ init()
 async function init() {
   const volumeMeta = await Loader.getVolumeMeta()
   const segmentMeta = await Loader.getSegmentMeta()
-  const params = setParams(volumeMeta, segmentMeta)
+  const segmentTileMeta = await Loader.getSegmentTileMeta()
+  const params = setParams(volumeMeta, segmentMeta, segmentTileMeta)
 
   // renderer setup
   const canvas = document.querySelector('.webgl')
@@ -19,10 +20,10 @@ async function init() {
   renderer.setClearColor(0, 0)
   renderer.outputColorSpace = THREE.SRGBColorSpace
 
-  const vLayer = new ViewerLayer({ params, volumeMeta, segmentMeta, renderer, canvas })
-  const vSegment = new ViewerSegment({ params, volumeMeta, segmentMeta, renderer, canvas })
+  const vLayer = new ViewerLayer({ params, renderer, canvas })
+  const vSegment = new ViewerSegment({ params, renderer, canvas })
 
-  const viewerList = { select: 'layer', options: { 'layer': vLayer, 'segment': vSegment } }
+  const viewerList = { select: 'segment', options: { 'layer': vLayer, 'segment': vSegment } }
   setMode(viewerList)
 
   setLoading(vLayer)
@@ -46,10 +47,11 @@ function setMode(viewerList) {
   updateGUI(viewerList)
 }
 
-function setParams(volumeMeta, segmentMeta) {
+function setParams(volumeMeta, segmentMeta, segmentTileMeta) {
   const params = {}
-  params.layers = { select: 0, options: {}, getLayer: {} }
-  params.segments = { select: 0, options: {}, getID: {} }
+  params.layers = { select: 0, options: {}, getLayer: {}, volumeMeta }
+  params.segments = { select: 0, options: {}, getID: {}, segmentMeta }
+  params.segmentTileMeta = segmentTileMeta
 
   // list all layer options
   for (let i = 0; i < volumeMeta.volume.length; i++) {
@@ -155,6 +157,8 @@ function setLabeling(viewer) {
   labelDiv.style.left = '50%'
   labelDiv.style.top = '50%'
   labelDiv.innerHTML = `${id}<br>layer: ${clip.z}~${clip.z+clip.d}`
+
+  if (viewer.controlDOM.style.display !== 'inline') labelDiv.style.display = 'none'
 
   window.addEventListener('mousedown', (e) => {
     if (e.target.className !== 'layer') return

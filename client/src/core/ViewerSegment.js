@@ -4,7 +4,7 @@ import { MOUSE, TOUCH } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
 export default class ViewerSegment {
-  constructor({ params, volumeMeta, segmentMeta, renderer, canvas }) {
+  constructor({ params, renderer, canvas }) {
     this.loading = false
     this.scene = null
     this.camera = null
@@ -14,14 +14,11 @@ export default class ViewerSegment {
 
     this.canvas = canvas
     this.renderer = renderer
-    this.volumeMeta = volumeMeta
-    this.segmentMeta = segmentMeta
+    this.segmentTileMeta = params.segmentTileMeta
     this.render = this.render.bind(this)
 
     this.params = {}
     this.params.mode = 'segment'
-    this.params.layers = params.layers
-    this.params.segments = params.segments
 
     this.init()
   }
@@ -46,7 +43,7 @@ export default class ViewerSegment {
         this.camera.bottom = -1
         this.camera.updateProjectionMatrix()
         this.renderer.setSize(window.innerWidth, window.innerHeight)
-        if (this.controls.enabled) this.render()
+        this.render()
       },
       false
     )
@@ -69,14 +66,40 @@ export default class ViewerSegment {
   }
 
   async updateSegment() {
-    const geometry = new THREE.BoxGeometry(1, 1, 1)
-    const material = new THREE.MeshBasicMaterial()
-    this.segmentMesh = new THREE.Mesh(geometry, material)
-    this.scene.add(this.segmentMesh)
+    const sTarget = this.segmentTileMeta.segment[0]
+    const sID = sTarget.id
+    const sc = sTarget.clip
+
+    const createList = []
+    createList.push(sTarget)
+
+    const loadingList = []
+    const normalMaterial = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
+
+    createList.forEach((sTarget) => {
+      const sID = sTarget.id
+
+      const loading = Loader.getSegmentTileData(`${sID}.obj`)
+      loading.then((object) => {
+        const geometry = object.children[0].geometry                       
+        const mesh = new THREE.Mesh(geometry, normalMaterial)
+        mesh.userData = sTarget
+        mesh.name = sID
+
+        const s = 1 / 172
+        const center = new THREE.Vector3(-2779, -2671, -37)
+        mesh.scale.set(s, s, s)
+        mesh.position.copy(center.clone().multiplyScalar(s))
+
+        this.scene.add(mesh)
+      })
+      loadingList.push(loading)
+    })
+    await Promise.all(loadingList)
   }
 
   render() {
-    if (!this.renderer) return
+    if (!this.renderer || this.controlDOM.style.display  !== 'inline') return
 
     this.renderer.render(this.scene, this.camera)
   }
