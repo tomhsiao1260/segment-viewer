@@ -9,7 +9,8 @@ init()
 async function init() {
   const volumeMeta = await Loader.getVolumeMeta()
   const segmentMeta = await Loader.getSegmentMeta()
-  const segmentTileMeta = await Loader.getSegmentTileMeta()
+  // const segmentTileMeta = await Loader.getSegmentTileMeta()
+  const segmentTileMeta = null
   const params = setParams(volumeMeta, segmentMeta, segmentTileMeta)
 
   // renderer setup
