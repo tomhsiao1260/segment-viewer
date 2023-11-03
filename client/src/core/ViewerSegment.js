@@ -66,7 +66,8 @@ export default class ViewerSegment {
   }
 
   async updateSegment() {
-    const sTarget = this.segmentTileMeta.segment[0]
+    // const sTarget = this.segmentTileMeta.segment[0]
+    const sTarget = this.segmentTileMeta.segment[1]
     const sID = sTarget.id
     const sc = sTarget.clip
 
@@ -86,8 +87,14 @@ export default class ViewerSegment {
         mesh.userData = sTarget
         mesh.name = sID
 
-        const s = 1 / 172
-        const center = new THREE.Vector3(-2779, -2671, -37)
+        const vc = sTarget.clip
+        const s = 1 / ((vc.w + vc.h + vc.d) / 3)
+        // const s = 1 / Math.max(vc.w, vc.h, vc.d)
+        const center = new THREE.Vector3(- vc.x - vc.w/2, - vc.y - vc.h/2, - vc.z - vc.d/2)
+
+        // const s = 1 / 172
+        // const center = new THREE.Vector3(-2779, -2671, -37)
+
         mesh.scale.set(s, s, s)
         mesh.position.copy(center.clone().multiplyScalar(s))
 

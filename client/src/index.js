@@ -23,7 +23,7 @@ async function init() {
   const vLayer = new ViewerLayer({ params, renderer, canvas })
   const vSegment = new ViewerSegment({ params, renderer, canvas })
 
-  const viewerList = { select: 'segment', options: { 'layer': vLayer, 'segment': vSegment } }
+  const viewerList = { select: 'layer', options: { 'layer': vLayer, 'segment': vSegment } }
   setMode(viewerList)
 
   setLoading(vLayer)
@@ -95,10 +95,10 @@ function updateGUI(viewerList) {
 
   gui = new GUI()
   gui.title('2023/11/03')
-  gui.add({ select: mode }, 'select', [ 'layer', 'segment' ]).name('mode').onChange((mode) => {
-    viewerList.select = mode
-    setMode(viewerList)
-  })
+  // gui.add({ select: mode }, 'select', [ 'layer', 'segment' ]).name('mode').onChange((mode) => {
+  //   viewerList.select = mode
+  //   setMode(viewerList)
+  // })
 
   if (mode === 'layer') {
     gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer, 'layer'))
