@@ -36,9 +36,9 @@ function setMode(viewerList) {
   const labelDiv = document.querySelector('#label')
   if (labelDiv) labelDiv.style.display = 'none'
 
-  viewerList.options.layer.controls.enabled = false
-  viewerList.options.segment.controls.enabled = false
-  viewer.controls.enabled = true
+  viewerList.options.layer.controlDOM.style.display = 'none'
+  viewerList.options.segment.controlDOM.style.display = 'none'
+  viewer.controlDOM.style.display = 'inline'
 
   if (mode === 'layer') updateViewer(viewer, 'layer')
   if (mode === 'segment') updateViewer(viewer, 'segment')
@@ -94,7 +94,6 @@ function updateGUI(viewerList) {
   gui = new GUI()
   gui.title('2023/11/03')
   gui.add({ select: mode }, 'select', [ 'layer', 'segment' ]).name('mode').onChange((mode) => {
-    console.log(mode)
     viewerList.select = mode
     setMode(viewerList)
   })
@@ -158,8 +157,7 @@ function setLabeling(viewer) {
   labelDiv.innerHTML = `${id}<br>layer: ${clip.z}~${clip.z+clip.d}`
 
   window.addEventListener('mousedown', (e) => {
-    if (!(e.target instanceof HTMLCanvasElement)) return
-    if (viewer.params.mode !== 'layer') return
+    if (e.target.className !== 'layer') return
 
     mouse.x = e.clientX / window.innerWidth * 2 - 1
     mouse.y = - (e.clientY / window.innerHeight) * 2 + 1
@@ -169,7 +167,7 @@ function setLabeling(viewer) {
 
     const labelDiv = document.querySelector('#label')
     if (labelDiv) labelDiv.style.display = 'none'
-
+ 
     // only this line is important
     const sTarget = viewer.getLabel(mouse)
     if (!sTarget) { return }

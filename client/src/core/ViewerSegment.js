@@ -8,6 +8,7 @@ export default class ViewerSegment {
     this.loading = false
     this.scene = null
     this.camera = null
+    this.controlDOM = null
     this.subVolumeMeta = null
     this.subSegmentMeta = null
 
@@ -45,12 +46,21 @@ export default class ViewerSegment {
         this.camera.bottom = -1
         this.camera.updateProjectionMatrix()
         this.renderer.setSize(window.innerWidth, window.innerHeight)
-        this.render()
+        if (this.controls.enabled) this.render()
       },
       false
     )
 
-    this.controls = new OrbitControls(this.camera, this.canvas)
+    this.controlDOM = document.createElement('div')
+    this.controlDOM.classList.add(this.params.mode)
+    this.controlDOM.style.position = 'absolute'
+    this.controlDOM.style.width = '100%'
+    this.controlDOM.style.height = '100%'
+    this.controlDOM.style.margin = '0'
+    this.controlDOM.style.padding = '0'
+    document.body.appendChild(this.controlDOM)
+
+    this.controls = new OrbitControls(this.camera, this.controlDOM)
     this.controls.enableDamping = false
     this.controls.screenSpacePanning = true
     this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN }

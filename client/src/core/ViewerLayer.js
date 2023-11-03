@@ -16,6 +16,7 @@ export default class ViewerLayer {
     this.bvh = null
     this.scene = null
     this.camera = null
+    this.controlDOM = null
     this.cmtexture = null
     this.clipGeometry = null
     this.focusGeometry = null
@@ -61,12 +62,21 @@ export default class ViewerLayer {
         this.camera.bottom = -1
         this.camera.updateProjectionMatrix()
         this.renderer.setSize(window.innerWidth, window.innerHeight)
-        this.render()
+        if (this.controls.enabled) this.render()
       },
       false
     )
 
-    this.controls = new OrbitControls(this.camera, this.canvas)
+    this.controlDOM = document.createElement('div')
+    this.controlDOM.classList.add(this.params.mode)
+    this.controlDOM.style.position = 'absolute'
+    this.controlDOM.style.width = '100%'
+    this.controlDOM.style.height = '100%'
+    this.controlDOM.style.margin = '0'
+    this.controlDOM.style.padding = '0'
+    document.body.appendChild(this.controlDOM)
+
+    this.controls = new OrbitControls(this.camera, this.controlDOM)
     this.controls.enableDamping = false
     this.controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
     this.controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
