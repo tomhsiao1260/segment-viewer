@@ -9,8 +9,7 @@ init()
 async function init() {
   const volumeMeta = await Loader.getVolumeMeta()
   const segmentMeta = await Loader.getSegmentMeta()
-  // const segmentTileMeta = await Loader.getSegmentTileMeta()
-  const segmentTileMeta = null
+  const segmentTileMeta = await Loader.getSegmentTileMeta()
   const params = setParams(volumeMeta, segmentMeta, segmentTileMeta)
 
   // renderer setup
@@ -24,7 +23,7 @@ async function init() {
   const vLayer = new ViewerLayer({ params, renderer, canvas })
   const vSegment = new ViewerSegment({ params, renderer, canvas })
 
-  const viewerList = { select: 'layer', options: { 'layer': vLayer, 'segment': vSegment } }
+  const viewerList = { select: 'segment', options: { 'layer': vLayer, 'segment': vSegment } }
   setMode(viewerList)
 
   setLoading(vLayer)
@@ -94,8 +93,8 @@ function updateGUI(viewerList) {
 
   if (gui) { gui.destroy() }
 
-  gui = new GUI()
-  gui.title('2023/11/03')
+  gui = new GUI({ width: 200 })
+  // gui.title('2023/11/03')
   // gui.add({ select: mode }, 'select', [ 'layer', 'segment' ]).name('mode').onChange((mode) => {
   //   viewerList.select = mode
   //   setMode(viewerList)
@@ -131,6 +130,18 @@ function updateGUI(viewerList) {
   }
 
   if (mode === 'segment') {
+    gui.add(viewer.params, 'flatten', 0, 1, 0.01).onChange(viewer.render)
+    gui.add(viewer.params, 'ink').onChange(viewer.render)
+    gui.add(viewer.params, '1').onChange(viewer.render)
+    gui.add(viewer.params, '2').onChange(viewer.render)
+    gui.add(viewer.params, '3').onChange(viewer.render)
+    gui.add(viewer.params, '4').onChange(viewer.render)
+    gui.add(viewer.params, '5').onChange(viewer.render)
+    gui.add(viewer.params, '6').onChange(viewer.render)
+    gui.add(viewer.params, '7').onChange(viewer.render)
+    gui.add(viewer.params, '8').onChange(viewer.render)
+    gui.add(viewer.params, '9').onChange(viewer.render)
+    gui.add(viewer.params, '10').onChange(viewer.render)
   }
 }
 
