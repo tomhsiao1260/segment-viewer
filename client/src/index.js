@@ -23,11 +23,14 @@ async function init() {
   const vLayer = new ViewerLayer({ params, renderer, canvas })
   const vSegment = new ViewerSegment({ params, renderer, canvas })
 
-  const viewerList = { select: 'segment', options: { 'layer': vLayer, 'segment': vSegment } }
+  const url = new URLSearchParams(window.location.search)
+  const mode = url.get('mode') ? url.get('mode') : 'segment'
+  const viewerList = { select: mode, options: { 'layer': vLayer, 'segment': vSegment } }
   setMode(viewerList)
 
   setLoading(vLayer)
-  setLabeling(vLayer)
+  setLayerLabeling(vLayer)
+  // setSegmentLabeling(vSegment)
 }
 
 function setMode(viewerList) {
@@ -160,8 +163,8 @@ function setLoading(viewer) {
   }, 500)
 }
 
-// segment labeling
-function setLabeling(viewer) {
+// labeling
+function setLayerLabeling(viewer) {
   const mouse = new THREE.Vector2()
   const labelDiv = document.createElement('div')
   labelDiv.id = 'label'
@@ -202,3 +205,4 @@ function setLabeling(viewer) {
     viewer.render()
   })
 }
+

@@ -433,15 +433,15 @@ export default class ViewerLayer {
 
     const url = new URL(window.location.href)
     const searchParams = url.searchParams
+    searchParams.set('mode', 'layer')
     searchParams.set('x', x.toFixed(0))
     searchParams.set('y', y.toFixed(0))
-    searchParams.set('zoom', this.camera.zoom.toFixed(3))
     searchParams.set('layer', this.params.layers.getLayer[ this.params.layers.select ])
     searchParams.set('segment', this.params.segments.getID[ this.params.segments.select ])
+    searchParams.set('zoom', this.camera.zoom.toFixed(3))
     url.search = searchParams.toString()
 
     window.history.replaceState(undefined, undefined, url.href)
-    // window.history.pushState({ path: url.href }, '', url.href)
 
     this.card.material.uniforms.surface.value = this.params.surface
     this.card.material.uniforms.colorBool.value = this.params.colorBool

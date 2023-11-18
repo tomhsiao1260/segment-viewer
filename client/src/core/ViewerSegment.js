@@ -18,6 +18,7 @@ export default class ViewerSegment {
     this.canvas = canvas
     this.renderer = renderer
     this.render = this.render.bind(this)
+    this.meshList = []
 
     this.params = {}
     this.params.mode = 'segment'
@@ -100,18 +101,42 @@ export default class ViewerSegment {
         const index = i + 1
         const geometry = object.children[0].geometry                       
         const mesh = new THREE.Mesh(geometry, this.inkMaterial)
-        mesh.userData = sTarget
         mesh.name = id
 
         mesh.scale.set(s, s, s)
         mesh.userData = { index }
+        // mesh.userData = sTarget
         mesh.position.copy(center.clone().multiplyScalar(-s))
 
+        this.meshList.push(mesh)
         this.scene.add(mesh)
       })
       loadingList.push(loading)
     })
     await Promise.all(loadingList)
+
+    // update url parameters
+    const url = new URL(window.location.href)
+    const searchParams = url.searchParams
+    searchParams.set('mode', 'segment')
+    searchParams.set('segment', id)
+    url.search = searchParams.toString()
+    window.history.replaceState(undefined, undefined, url.href)
+  }
+
+  getLabel(mouse) {
+    const select = this.params.segmentLayers.select
+    const sTarget = this.params.segmentLayers.segmentLayerMeta.segment[select]
+    const { id, clip } = sTarget
+
+    if (!mouse) { return { id, clip } }
+
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(mouse, this.camera)
+    const intersects = raycaster.intersectObjects(this.meshList)
+    if (!intersects.length) return
+
+    return { id, clip }
   }
 
   render() {
@@ -129,19 +154,14 @@ export default class ViewerSegment {
   }
 
   clear() {
-    const deleteList = []
-
-    this.scene.children.forEach((mesh) => {
-      if (!mesh.userData.index) return
-      deleteList.push(mesh)
-    })
-
-    deleteList.forEach((mesh) => {
+    this.meshList.forEach((mesh) => {
       mesh.geometry.dispose()
       mesh.material.dispose()
       mesh.geometry = null
       mesh.material = null
       this.scene.remove(mesh)
     })
+
+    this.meshList = []
   }
 }
