@@ -9,8 +9,8 @@ init()
 async function init() {
   const volumeMeta = await Loader.getVolumeMeta()
   const segmentMeta = await Loader.getSegmentMeta()
-  const segmentTileMeta = await Loader.getSegmentTileMeta()
-  const params = setParams(volumeMeta, segmentMeta, segmentTileMeta)
+  const segmentLayerMeta = await Loader.getSegmentLayerMeta()
+  const params = setParams(volumeMeta, segmentMeta, segmentLayerMeta)
 
   // renderer setup
   const canvas = document.querySelector('.webgl')
@@ -47,11 +47,11 @@ function setMode(viewerList) {
   updateGUI(viewerList)
 }
 
-function setParams(volumeMeta, segmentMeta, segmentTileMeta) {
+function setParams(volumeMeta, segmentMeta, segmentLayerMeta) {
   const params = {}
   params.layers = { select: 0, options: {}, getLayer: {}, volumeMeta }
   params.segments = { select: 0, options: {}, getID: {}, segmentMeta }
-  params.segmentTileMeta = segmentTileMeta
+  params.segmentLayers = { select: 0, options: {}, getID: {}, segmentLayerMeta }
 
   // list all layer options
   for (let i = 0; i < volumeMeta.volume.length; i++) {
@@ -64,6 +64,12 @@ function setParams(volumeMeta, segmentMeta, segmentTileMeta) {
     const id = segmentMeta.segment[i].id
     params.segments.options[ id ] = i
     params.segments.getID[ i ] = id
+  }
+  // list all segment options (with cutting)
+  for (let i = 0; i < segmentLayerMeta.segment.length; i++) {
+    const id = segmentLayerMeta.segment[i].id
+    params.segmentLayers.options[ id ] = i
+    params.segmentLayers.getID[ i ] = id
   }
 
   return params
@@ -93,12 +99,12 @@ function updateGUI(viewerList) {
 
   if (gui) { gui.destroy() }
 
-  gui = new GUI({ width: 200 })
-  // gui.title('2023/11/03')
-  // gui.add({ select: mode }, 'select', [ 'layer', 'segment' ]).name('mode').onChange((mode) => {
-  //   viewerList.select = mode
-  //   setMode(viewerList)
-  // })
+  gui = new GUI()
+  gui.title('2023/11/18')
+  gui.add({ select: mode }, 'select', [ 'layer', 'segment' ]).name('mode').onChange((mode) => {
+    viewerList.select = mode
+    setMode(viewerList)
+  })
 
   if (mode === 'layer') {
     gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer, 'layer'))
@@ -130,18 +136,15 @@ function updateGUI(viewerList) {
   }
 
   if (mode === 'segment') {
+    gui.add(viewer.params.segmentLayers, 'select', viewer.params.segmentLayers.options).name('segments').onChange(() => {
+      updateViewer(viewer, 'segment')
+      updateGUI(viewerList)
+    })
     gui.add(viewer.params, 'flatten', 0, 1, 0.01).onChange(viewer.render)
-    gui.add(viewer.params, 'ink').onChange(viewer.render)
-    gui.add(viewer.params, '1').onChange(viewer.render)
-    gui.add(viewer.params, '2').onChange(viewer.render)
-    gui.add(viewer.params, '3').onChange(viewer.render)
-    gui.add(viewer.params, '4').onChange(viewer.render)
-    gui.add(viewer.params, '5').onChange(viewer.render)
-    gui.add(viewer.params, '6').onChange(viewer.render)
-    gui.add(viewer.params, '7').onChange(viewer.render)
-    gui.add(viewer.params, '8').onChange(viewer.render)
-    gui.add(viewer.params, '9').onChange(viewer.render)
-    gui.add(viewer.params, '10').onChange(viewer.render)
+    gui.add(viewer.params, 'inklabels').onChange(viewer.render)
+
+    const { select, segmentLayerMeta } = viewer.params.segmentLayers
+    segmentLayerMeta.segment[select].chunk.forEach((v, i) => { gui.add(viewer.params, i+1).onChange(viewer.render) })
   }
 }
 

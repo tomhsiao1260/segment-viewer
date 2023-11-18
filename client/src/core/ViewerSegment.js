@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import Loader from '../Loader'
 import { MOUSE, TOUCH } from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import { ArcballControls } from 'three/addons/controls/ArcballControls.js'
 import { TextureLoader } from 'three'
 import { FragmentShader } from './FragmentShader'
 import { TIFFLoader } from 'three/addons/loaders/TIFFLoader.js'
@@ -17,23 +17,16 @@ export default class ViewerSegment {
 
     this.canvas = canvas
     this.renderer = renderer
-    this.segmentTileMeta = params.segmentTileMeta
     this.render = this.render.bind(this)
 
     this.params = {}
     this.params.mode = 'segment'
+    this.params.segmentLayers = params.segmentLayers
     this.params.flatten = 1.0
-    this.params.ink = true
-    this.params['1'] = false
-    this.params['2'] = false
-    this.params['3'] = true
-    this.params['4'] = true
-    this.params['5'] = true
-    this.params['6'] = true
-    this.params['7'] = true
-    this.params['8'] = true
-    this.params['9'] = true
-    this.params['10'] = true
+    this.params.inklabels = true
+
+    const { chunk } = params.segmentLayers.segmentLayerMeta.segment[ params.segmentLayers.select ]
+    chunk.forEach((v, i) => { this.params[i + 1] = true })
 
     this.init()
   }
@@ -72,7 +65,7 @@ export default class ViewerSegment {
     this.controlDOM.style.padding = '0'
     document.body.appendChild(this.controlDOM)
 
-    this.controls = new OrbitControls(this.camera, this.controlDOM)
+    this.controls = new ArcballControls(this.camera, this.controlDOM, this.scene)
     this.controls.enableDamping = false
     this.controls.screenSpacePanning = true
     this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN }
@@ -81,58 +74,42 @@ export default class ViewerSegment {
   }
 
   async updateSegment() {
-    const sTarget = this.segmentTileMeta.segment[2]
-    const sID = sTarget.id
-    const sc = sTarget.clip
-    const ink = sTarget.ink
-    const texture = sTarget.texture
-
-    const createList = []
-    createList.push(sTarget)
+    const select = this.params.segmentLayers.select
+    const sTarget = this.params.segmentLayers.segmentLayerMeta.segment[select]
+    const { id, clip, area, inklabels, texture, chunk } = sTarget
 
     const loadingList = []
-    const stexture = await new TIFFLoader().load('segment-tile/' + texture)
-    const mtexture = await new TextureLoader().load('segment-tile/' + ink)
+    const surfaceTexture = await new TIFFLoader().load(`segment-layer/${id}/${texture}`)
+    const maskTexture = await new TextureLoader().load(`segment-layer/${id}/${inklabels}`)
+
+    const s = 1 / ((clip.w + clip.h + clip.d) / 3)
+    const center = new THREE.Vector3(clip.x + clip.w/2, clip.y + clip.h/2, clip.z + clip.d/2)
+
     this.normalMaterial = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
     this.inkMaterial = new FragmentShader()
-
-    this.inkMaterial.uniforms.tDiffuse.value = stexture
-    this.inkMaterial.uniforms.uMask.value = mtexture
+    this.inkMaterial.uniforms.tDiffuse.value = surfaceTexture
+    this.inkMaterial.uniforms.uMask.value = maskTexture
+    this.inkMaterial.uniforms.uArea.value = area
     this.inkMaterial.uniforms.opacity.value = 1.0
+    this.inkMaterial.uniforms.uCenter.value = center
     this.inkMaterial.uniforms.uFlatten.value = this.params.flatten
 
-    createList.forEach((sTarget) => {
-      const chunkList = sTarget.chunk
-
-      chunkList.forEach((sIDChunk, i) => {
-
-      const sID = sIDChunk
-      // const sID = sTarget.id
-
-      const loading = Loader.getSegmentTileData(`${sID}.obj`)
+    chunk.forEach((sID_Layer, i) => {
+      const loading = Loader.getSegmentLayerData(`${id}/${sID_Layer}.obj`)
       loading.then((object) => {
+        const index = i + 1
         const geometry = object.children[0].geometry                       
         const mesh = new THREE.Mesh(geometry, this.inkMaterial)
         mesh.userData = sTarget
-        mesh.name = sID
-
-        const vc = sTarget.clip
-        const s = 1 / ((vc.w + vc.h + vc.d) / 3)
-        // const s = 1 / Math.max(vc.w, vc.h, vc.d)
-        const center = new THREE.Vector3(- vc.x - vc.w/2, - vc.y - vc.h/2, - vc.z - vc.d/2)
-
-        const index = i + 1
-        // const index = parseInt(sID.split('_')[2])
+        mesh.name = id
 
         mesh.scale.set(s, s, s)
         mesh.userData = { index }
-        mesh.position.copy(center.clone().multiplyScalar(s))
+        mesh.position.copy(center.clone().multiplyScalar(-s))
 
         this.scene.add(mesh)
       })
       loadingList.push(loading)
-
-      })
     })
     await Promise.all(loadingList)
   }
@@ -145,21 +122,26 @@ export default class ViewerSegment {
       if (!index) return
       mesh.visible = this.params[index]
       this.inkMaterial.uniforms.uFlatten.value = this.params.flatten
-      mesh.material = this.params.ink ? this.inkMaterial : this.normalMaterial
+      mesh.material = this.params.inklabels ? this.inkMaterial : this.normalMaterial
     })
 
     this.renderer.render(this.scene, this.camera)
   }
 
   clear() {
-    if (this.segmentMesh) {
-      this.segmentMesh.geometry.dispose()
-      this.segmentMesh.material.dispose()
-      this.segmentMesh.geometry = null
-      this.segmentMesh.material = null
-      this.scene.remove(this.segmentMesh)
-    }
+    const deleteList = []
 
-    this.segmentMesh = null
+    this.scene.children.forEach((mesh) => {
+      if (!mesh.userData.index) return
+      deleteList.push(mesh)
+    })
+
+    deleteList.forEach((mesh) => {
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+      mesh.geometry = null
+      mesh.material = null
+      this.scene.remove(mesh)
+    })
   }
 }

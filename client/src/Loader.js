@@ -9,6 +9,8 @@ export default class Loader {
 
   static getSegmentMeta() { return fetch('segment/meta.json').then((res) => res.json()) }
 
+  static getSegmentLayerMeta() { return fetch('segment-layer/meta.json').then((res) => res.json()) }
+
   static getSubVolumeMeta(folder) { return fetch(`volume/${folder}/meta.json`).then((res) => res.json()) }
 
   static getSubSegmentMeta(folder) { return fetch(`segment/${folder}/meta.json`).then((res) => res.json()) }
@@ -17,7 +19,5 @@ export default class Loader {
 
   static getSegmentData(filename) { return new OBJLoader().loadAsync('segment/' + filename) }
 
-  static getSegmentTileMeta() { return fetch('segment-tile/meta.json').then((res) => res.json()) }
-
-  static getSegmentTileData(filename) { return new OBJLoader().loadAsync('segment-tile/' + filename) }
+  static getSegmentLayerData(filename) { return new OBJLoader().loadAsync('segment-layer/' + filename) }
 }
