@@ -26,8 +26,7 @@ export default class ViewerSegment {
     this.params.flatten = 1.0
     this.params.inklabels = true
 
-    const { chunk } = params.segmentLayers.segmentLayerMeta.segment[ params.segmentLayers.select ]
-    chunk.forEach((v, i) => { this.params[i + 1] = true })
+    for (let i = 0; i < 15; i++) { this.params[i + 1] = true }
 
     this.init()
   }
@@ -72,15 +71,20 @@ export default class ViewerSegment {
     this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN }
     this.controls.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN }
     this.controls.addEventListener('change', this.render)
+
+    const url = new URLSearchParams(window.location.search)
+    if (url.get('segment')) this.params.segmentLayers.select = this.params.segmentLayers.options[ url.get('segment') ]
+    if(!this.params.segmentLayers.select) this.params.segmentLayers.select = 0
   }
 
   async updateSegment() {
     const select = this.params.segmentLayers.select
     const sTarget = this.params.segmentLayers.segmentLayerMeta.segment[select]
     const { id, clip, area, inklabels, texture, chunk } = sTarget
+    chunk.forEach((v, i) => { this.params[i + 1] = true })
 
     const loadingList = []
-    const surfaceTexture = await new TIFFLoader().loadAsync(`segment-layer/${id}/${texture}`)
+    const surfaceTexture = await new TextureLoader().loadAsync(`segment-layer/${id}/${texture}`)
     const maskTexture = await new TextureLoader().loadAsync(`segment-layer/${id}/${inklabels}`)
 
     const s = 1 / ((clip.w + clip.h + clip.d) / 3)

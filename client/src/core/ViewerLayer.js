@@ -101,6 +101,7 @@ export default class ViewerLayer {
       this.camera.position.x = x
       this.camera.position.y = y
     }
+    if(!this.params.segments.select) this.params.segments.select = 0
     this.camera.updateProjectionMatrix()
   }
 

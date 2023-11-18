@@ -147,7 +147,7 @@ function updateGUI(viewerList) {
     gui.add(viewer.params, 'inklabels').onChange(viewer.render)
 
     const { select, segmentLayerMeta } = viewer.params.segmentLayers
-    segmentLayerMeta.segment[select].chunk.forEach((v, i) => { gui.add(viewer.params, i+1).onChange(viewer.render) })
+    segmentLayerMeta.segment[select].chunk.forEach((v, i) => { gui.add(viewer.params, i+1).listen().onChange(viewer.render) })
   }
 }
 
