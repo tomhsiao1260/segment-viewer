@@ -440,7 +440,8 @@ export default class ViewerLayer {
     searchParams.set('segment', this.params.segments.getID[ this.params.segments.select ])
     url.search = searchParams.toString()
 
-    window.history.pushState({ path: url.href }, '', url.href)
+    window.history.replaceState(undefined, undefined, url.href)
+    // window.history.pushState({ path: url.href }, '', url.href)
 
     this.card.material.uniforms.surface.value = this.params.surface
     this.card.material.uniforms.colorBool.value = this.params.colorBool

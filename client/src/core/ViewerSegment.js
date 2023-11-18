@@ -79,8 +79,8 @@ export default class ViewerSegment {
     const { id, clip, area, inklabels, texture, chunk } = sTarget
 
     const loadingList = []
-    const surfaceTexture = await new TIFFLoader().load(`segment-layer/${id}/${texture}`)
-    const maskTexture = await new TextureLoader().load(`segment-layer/${id}/${inklabels}`)
+    const surfaceTexture = await new TIFFLoader().loadAsync(`segment-layer/${id}/${texture}`)
+    const maskTexture = await new TextureLoader().loadAsync(`segment-layer/${id}/${inklabels}`)
 
     const s = 1 / ((clip.w + clip.h + clip.d) / 3)
     const center = new THREE.Vector3(clip.x + clip.w/2, clip.y + clip.h/2, clip.z + clip.d/2)
