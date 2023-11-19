@@ -22,6 +22,7 @@ export default class ViewerSegment {
     this.meshList = []
     this.originGeoList = []
     this.flattenGeoList = []
+    this.meshVirtualList = []
 
     this.params = {}
     this.params.mode = 'segment'
@@ -84,7 +85,9 @@ export default class ViewerSegment {
     const select = this.params.segmentLayers.select
     const sTarget = this.params.segmentLayers.segmentLayerMeta.segment[select]
     const { id, clip, area, inklabels, texture, chunk } = sTarget
+
     chunk.forEach((v, i) => { this.params[i + 1] = true })
+    this.meshList = Array(chunk.length).fill(null)
 
     const loadingList = []
     const surfaceTexture = await new TextureLoader().loadAsync(`segment-layer/${id}/${texture}`)
@@ -116,7 +119,7 @@ export default class ViewerSegment {
         // mesh.userData = sTarget
         mesh.position.copy(center.clone().multiplyScalar(-s))
 
-        this.meshList.push(mesh)
+        this.meshList[i] = mesh
         this.scene.add(mesh)
       })
       loadingList.push(loading)
@@ -136,19 +139,19 @@ export default class ViewerSegment {
   }
 
   calculateGeometry() {
-    const uCenter = this.inkMaterial.uniforms.uCenter.value
-    const uArea = this.inkMaterial.uniforms.uArea.value
-    const uTifsize = this.inkMaterial.uniforms.uTifsize.value
+    const center = this.inkMaterial.uniforms.uCenter.value
+    const area = this.inkMaterial.uniforms.uArea.value
+    const tifsize = this.inkMaterial.uniforms.uTifsize.value
 
     const select = this.params.segmentLayers.select
     const sTarget = this.params.segmentLayers.segmentLayerMeta.segment[select]
     const { clip } = sTarget
     const s = 1 / ((clip.w + clip.h + clip.d) / 3)
 
-    this.meshList.forEach((mesh, indx) => {
+    this.meshList.forEach((mesh, i) => {
       const flip = 1
-      const r = uTifsize.y / uTifsize.x
-      const scale = Math.sqrt(uArea / r)
+      const r = tifsize.y / tifsize.x
+      const scale = Math.sqrt(area / r)
 
       const o_positions = []
       const f_positions = []
@@ -171,9 +174,9 @@ export default class ViewerSegment {
 
         const dir = new THREE.Vector3((0.5 - uvx) * 1.0, (0.5 - uvy) * r * flip, 0.0)
 
-        const flattenX = uCenter.x + dir.x * scale
-        const flattenY = uCenter.y + dir.y * scale
-        const flattenZ = uCenter.z + dir.z * scale
+        const flattenX = center.x + dir.x * scale
+        const flattenY = center.y + dir.y * scale
+        const flattenZ = center.z + dir.z * scale
 
         o_positions.push(x, y, z)
         f_positions.push(flattenX, flattenY, flattenZ)
@@ -191,42 +194,115 @@ export default class ViewerSegment {
       flattenGeometry.computeVertexNormals()
       this.flattenGeoList.push(flattenGeometry)
 
-      // const mesh1 = new THREE.Mesh(originalGeometry, this.inkMaterial)
-      const mesh1 = new THREE.Mesh(originalGeometry, this.normalMaterial)
-      const mesh2 = new THREE.Mesh(flattenGeometry, this.normalMaterial)
-      // const mesh2 = new THREE.Mesh(flattenGeometry, this.inkMaterial)
+      const currentGeometry = new THREE.BufferGeometry()
+      currentGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2))
+      currentGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
+      currentGeometry.computeVertexNormals()
 
-      mesh1.scale.set(s, s, s)
-      mesh1.position.copy(uCenter.clone().multiplyScalar(-s))
-      mesh2.scale.set(s, s, s)
-      mesh2.position.copy(uCenter.clone().multiplyScalar(-s))
+      const meshV = new THREE.Mesh(currentGeometry, this.normalMaterial)
+      meshV.userData = mesh.userData
+      meshV.scale.set(s, s, s)
+      meshV.position.copy(center.clone().multiplyScalar(-s))
+      this.meshVirtualList.push(meshV)
+      this.scene.add(meshV)
+    })
+  }
 
-      this.scene.add(mesh1)
-      this.scene.add(mesh2)
+  updateGeometry() {
+    const flatten = this.inkMaterial.uniforms.uFlatten.value
+
+    this.meshVirtualList.forEach((meshV, i) => {
+      const originGeometry = this.originGeoList[i]
+      const flattenGeometry = this.flattenGeoList[i]
+
+      const o_positions = originGeometry.getAttribute('position').array
+      const f_positions = flattenGeometry.getAttribute('position').array
+      const c_positions = []
+
+      for (let i = 0; i < o_positions.length / 3; i++) {
+        const ox = o_positions[3 * i + 0]
+        const oy = o_positions[3 * i + 1]
+        const oz = o_positions[3 * i + 2]
+        const fx = f_positions[3 * i + 0]
+        const fy = f_positions[3 * i + 1]
+        const fz = f_positions[3 * i + 2]
+
+        const cx = ox + (fx - ox) * flatten
+        const cy = oy + (fy - oy) * flatten
+        const cz = oz + (fz - oz) * flatten
+
+        c_positions.push(cx, cy, cz)
+      }
+
+      meshV.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c_positions), 3))
+      meshV.geometry.computeVertexNormals()
     })
   }
 
   getLabel(mouse) {
-    const select = this.params.segmentLayers.select
-    const sTarget = this.params.segmentLayers.segmentLayerMeta.segment[select]
-    const { id, clip } = sTarget
+    const list = []
 
-    if (!mouse) { return { id, clip } }
+    // only select activate pieces
+    this.meshVirtualList.forEach((meshV, i) => {
+      const index = meshV.userData.index
+      if (this.params[ index ]) { list.push(meshV) }
+    })
 
     const raycaster = new THREE.Raycaster()
     raycaster.setFromCamera(mouse, this.camera)
-    const intersects = raycaster.intersectObjects(this.meshList)
+    const intersects = raycaster.intersectObjects(list)
     if (!intersects.length) return
 
-    return { id, clip }
+    // use intersect point & uv to trace back to the original position
+    const { uv, face, object } = intersects[0]
+    const { index } = object.userData
+    console.log(intersects[0])
+
+    // find that point (weighted average on a intersect triangle)
+    for (let i = 0; i < this.originGeoList.length; i++) {
+      if (index !== (i + 1)) continue
+
+      const originalGeometry = this.originGeoList[i]
+      const pos = originalGeometry.getAttribute('position').array
+      const uvs = originalGeometry.getAttribute('uv').array
+
+      const { a, b, c } = face
+      const pa = new THREE.Vector3(pos[3 * a + 0], pos[3 * a + 1], pos[3 * a + 2])
+      const pb = new THREE.Vector3(pos[3 * b + 0], pos[3 * b + 1], pos[3 * b + 2])
+      const pc = new THREE.Vector3(pos[3 * c + 0], pos[3 * c + 1], pos[3 * c + 2])
+      const ua = new THREE.Vector2(uvs[2 * a + 0], uvs[2 * a + 1])
+      const ub = new THREE.Vector2(uvs[2 * b + 0], uvs[2 * b + 1])
+      const uc = new THREE.Vector2(uvs[2 * c + 0], uvs[2 * c + 1])
+
+      const da = 1 / uv.distanceTo(ua)
+      const db = 1 / uv.distanceTo(ub)
+      const dc = 1 / uv.distanceTo(uc)
+      const wa = da / (da + db + dc)
+      const wb = db / (da + db + dc)
+      const wc = dc / (da + db + dc)
+
+      const x = Math.round(pa.x * wa + pb.x * wb + pc.x * wc)
+      const y = Math.round(pa.y * wa + pb.y * wb + pc.y * wc)
+      const z = Math.round(pa.z * wa + pb.z * wb + pc.z * wc)
+
+      const url = new URL(window.location.href)
+      const searchParams = url.searchParams
+      searchParams.set('x', x)
+      searchParams.set('y', y)
+      searchParams.set('layer', z)
+      url.search = searchParams.toString()
+      window.history.replaceState(undefined, undefined, url.href)
+
+      return { x, y, z }
+    }
   }
 
   render() {
     if (!this.renderer || this.controlDOM.style.display  !== 'inline') return
 
-    this.scene.children.forEach((mesh) => {
+    this.meshList.forEach((mesh) => {
       const index = mesh.userData.index
-      if (!index) return
+      // mesh.visible = false
       mesh.visible = this.params[index]
       this.inkMaterial.uniforms.uFlatten.value = this.params.flatten
       mesh.material = this.params.inklabels ? this.inkMaterial : this.normalMaterial
@@ -260,8 +336,17 @@ export default class ViewerSegment {
       this.scene.remove(mesh)
     })
 
+    this.meshVirtualList.forEach((mesh) => {
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+      mesh.geometry = null
+      mesh.material = null
+      this.scene.remove(mesh)
+    })
+
     this.meshList = []
     this.originGeoList = []
     this.flattenGeoList = []
+    this.meshVirtualList = []
   }
 }

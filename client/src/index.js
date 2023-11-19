@@ -30,7 +30,7 @@ async function init() {
 
   setLoading(vLayer)
   setLayerLabeling(vLayer)
-  // setSegmentLabeling(vSegment)
+  setSegmentLabeling(vSegment)
 }
 
 function setMode(viewerList) {
@@ -147,7 +147,10 @@ function updateGUI(viewerList) {
 
     const flattenController = gui.add(viewer.params, 'flatten', 0, 1, 0.01)
     flattenController.onChange(viewer.render)
-    flattenController.onFinishChange(() => console.log('hi'))
+    flattenController.onFinishChange(() => {
+      viewer.updateGeometry()
+      viewer.render()
+    })
 
     const { select, segmentLayerMeta } = viewer.params.segmentLayers
     segmentLayerMeta.segment[select].chunk.forEach((v, i) => { gui.add(viewer.params, i+1).listen().onChange(viewer.render) })
@@ -206,6 +209,30 @@ function setLayerLabeling(viewer) {
     viewer.params.segments.select = viewer.params.segments.options[id]
     viewer.updateFocusGeometry()
     viewer.render()
+  })
+}
+
+function setSegmentLabeling(viewer) {
+  const mouse = new THREE.Vector2()
+
+  window.addEventListener('mousedown', (e) => {
+    if (e.target.className !== 'segment') return
+
+    mouse.x = e.clientX / window.innerWidth * 2 - 1
+    mouse.y = - (e.clientY / window.innerHeight) * 2 + 1
+
+    const labelDiv = document.querySelector('#label')
+    if (labelDiv) labelDiv.style.display = 'none'
+
+    // only this line is important
+    const p = viewer.getLabel(mouse)
+    if (!p) { return }
+
+    // const { id, clip } = sTarget
+    labelDiv.style.display = 'inline'
+    labelDiv.style.left = (e.clientX + 20) + 'px'
+    labelDiv.style.top = (e.clientY + 20) + 'px'
+    labelDiv.innerHTML = `x: ${p.x}<br/>y: ${p.y}<br/>z: ${p.z}`
   })
 }
 
