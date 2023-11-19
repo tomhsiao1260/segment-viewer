@@ -10,6 +10,7 @@ export class FragmentShader extends ShaderMaterial {
         tDiffuse: { value: null },
         uMask: { value: null },
         uCenter: { value: null },
+        uTifsize: { value: null },
         uFlatten: { value: 0.0 },
         uArea: { value: 0.0 },
         opacity: { value: 1.0 }
@@ -23,7 +24,7 @@ export class FragmentShader extends ShaderMaterial {
         uniform float uArea;
         uniform vec3 uCenter;
         // uniform vec3 uNormal;
-        // uniform vec2 uTifsize;
+        uniform vec2 uTifsize;
         // uniform vec3 uBasevectorX;
         // uniform vec3 uBasevectorY;
 
@@ -32,9 +33,8 @@ export class FragmentShader extends ShaderMaterial {
         void main()
         {
             float flip = 1.0;
-            float r = 0.828;
+            float r = uTifsize.y / uTifsize.x;
             // float flip = uFlip ? -1.0 : 1.0;
-            // float r = uTifsize.y / uTifsize.x;
 
             vec3 dir = (0.5 - uv.x) * vec3(1.0, 0.0, 0.0) + (0.5 - uv.y) * vec3(0.0, 1.0, 0.0) * r * flip;
             vec3 flatten = uCenter + dir * sqrt(uArea / r);

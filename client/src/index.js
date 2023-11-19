@@ -103,7 +103,7 @@ function updateGUI(viewerList) {
   if (gui) { gui.destroy() }
 
   gui = new GUI()
-  gui.title('2023/11/18')
+  gui.title('2023/11/19')
   gui.add({ select: mode }, 'select', [ 'layer', 'segment' ]).name('mode').onChange((mode) => {
     viewerList.select = mode
     setMode(viewerList)
@@ -143,8 +143,11 @@ function updateGUI(viewerList) {
       updateViewer(viewer, 'segment')
       updateGUI(viewerList)
     })
-    gui.add(viewer.params, 'flatten', 0, 1, 0.01).onChange(viewer.render)
     gui.add(viewer.params, 'inklabels').onChange(viewer.render)
+
+    const flattenController = gui.add(viewer.params, 'flatten', 0, 1, 0.01)
+    flattenController.onChange(viewer.render)
+    flattenController.onFinishChange(() => console.log('hi'))
 
     const { select, segmentLayerMeta } = viewer.params.segmentLayers
     segmentLayerMeta.segment[select].chunk.forEach((v, i) => { gui.add(viewer.params, i+1).listen().onChange(viewer.render) })

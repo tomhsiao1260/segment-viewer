@@ -18,7 +18,10 @@ export default class ViewerSegment {
     this.canvas = canvas
     this.renderer = renderer
     this.render = this.render.bind(this)
+
     this.meshList = []
+    this.originGeoList = []
+    this.flattenGeoList = []
 
     this.params = {}
     this.params.mode = 'segment'
@@ -97,6 +100,7 @@ export default class ViewerSegment {
     this.inkMaterial.uniforms.uArea.value = area
     this.inkMaterial.uniforms.opacity.value = 1.0
     this.inkMaterial.uniforms.uCenter.value = center
+    this.inkMaterial.uniforms.uTifsize.value = new THREE.Vector2(surfaceTexture.image.width, surfaceTexture.image.height)
     this.inkMaterial.uniforms.uFlatten.value = this.params.flatten
 
     chunk.forEach((sID_Layer, i) => {
@@ -119,6 +123,9 @@ export default class ViewerSegment {
     })
     await Promise.all(loadingList)
 
+    // compute the flattened geometry (for raycasting when mouse click)
+    this.calculateGeometry()
+
     // update url parameters
     const url = new URL(window.location.href)
     const searchParams = url.searchParams
@@ -126,6 +133,77 @@ export default class ViewerSegment {
     searchParams.set('segment', id)
     url.search = searchParams.toString()
     window.history.replaceState(undefined, undefined, url.href)
+  }
+
+  calculateGeometry() {
+    const uCenter = this.inkMaterial.uniforms.uCenter.value
+    const uArea = this.inkMaterial.uniforms.uArea.value
+    const uTifsize = this.inkMaterial.uniforms.uTifsize.value
+
+    const select = this.params.segmentLayers.select
+    const sTarget = this.params.segmentLayers.segmentLayerMeta.segment[select]
+    const { clip } = sTarget
+    const s = 1 / ((clip.w + clip.h + clip.d) / 3)
+
+    this.meshList.forEach((mesh, indx) => {
+      const flip = 1
+      const r = uTifsize.y / uTifsize.x
+      const scale = Math.sqrt(uArea / r)
+
+      const o_positions = []
+      const f_positions = []
+      const o_uvs = []
+      const f_uvs = []
+      const o_normals = []
+      const f_normals = []
+
+      const positions = mesh.geometry.getAttribute('position').array
+      const uvs = mesh.geometry.getAttribute('uv').array
+      const normals = mesh.geometry.getAttribute('normal').array
+
+      for (let i = 0; i < positions.length / 3; i++) {
+        const x = positions[3 * i + 0]
+        const y = positions[3 * i + 1]
+        const z = positions[3 * i + 2]
+
+        const uvx = uvs[2 * i + 0]
+        const uvy = uvs[2 * i + 1]
+
+        const dir = new THREE.Vector3((0.5 - uvx) * 1.0, (0.5 - uvy) * r * flip, 0.0)
+
+        const flattenX = uCenter.x + dir.x * scale
+        const flattenY = uCenter.y + dir.y * scale
+        const flattenZ = uCenter.z + dir.z * scale
+
+        o_positions.push(x, y, z)
+        f_positions.push(flattenX, flattenY, flattenZ)
+      }
+
+      const originalGeometry = new THREE.BufferGeometry()
+      originalGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2))
+      originalGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(o_positions), 3))
+      originalGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(normals), 3))
+      this.originGeoList.push(originalGeometry)
+
+      const flattenGeometry = new THREE.BufferGeometry()
+      flattenGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2))
+      flattenGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f_positions), 3))
+      flattenGeometry.computeVertexNormals()
+      this.flattenGeoList.push(flattenGeometry)
+
+      // const mesh1 = new THREE.Mesh(originalGeometry, this.inkMaterial)
+      const mesh1 = new THREE.Mesh(originalGeometry, this.normalMaterial)
+      const mesh2 = new THREE.Mesh(flattenGeometry, this.normalMaterial)
+      // const mesh2 = new THREE.Mesh(flattenGeometry, this.inkMaterial)
+
+      mesh1.scale.set(s, s, s)
+      mesh1.position.copy(uCenter.clone().multiplyScalar(-s))
+      mesh2.scale.set(s, s, s)
+      mesh2.position.copy(uCenter.clone().multiplyScalar(-s))
+
+      this.scene.add(mesh1)
+      this.scene.add(mesh2)
+    })
   }
 
   getLabel(mouse) {
@@ -166,6 +244,24 @@ export default class ViewerSegment {
       this.scene.remove(mesh)
     })
 
+    this.originGeoList.forEach((mesh) => {
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+      mesh.geometry = null
+      mesh.material = null
+      this.scene.remove(mesh)
+    })
+
+    this.flattenGeoList.forEach((mesh) => {
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+      mesh.geometry = null
+      mesh.material = null
+      this.scene.remove(mesh)
+    })
+
     this.meshList = []
+    this.originGeoList = []
+    this.flattenGeoList = []
   }
 }
