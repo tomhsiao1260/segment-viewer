@@ -10,7 +10,8 @@ async function init() {
   const volumeMeta = await Loader.getVolumeMeta()
   const segmentMeta = await Loader.getSegmentMeta()
   const segmentLayerMeta = await Loader.getSegmentLayerMeta()
-  const params = setParams(volumeMeta, segmentMeta, segmentLayerMeta)
+  const segmentCenterData = await Loader.getSegmentCenterData()
+  const params = setParams(volumeMeta, segmentMeta, segmentLayerMeta, segmentCenterData)
 
   // renderer setup
   const canvas = document.querySelector('.webgl')
@@ -50,11 +51,12 @@ function setMode(viewerList) {
   updateGUI(viewerList)
 }
 
-function setParams(volumeMeta, segmentMeta, segmentLayerMeta) {
+function setParams(volumeMeta, segmentMeta, segmentLayerMeta, segmentCenterData) {
   const params = {}
   params.layers = { select: 0, options: {}, getLayer: {}, volumeMeta }
   params.segments = { select: 0, options: {}, getID: {}, segmentMeta }
   params.segmentLayers = { select: 0, options: {}, getID: {}, segmentLayerMeta }
+  params.segmentCenter = segmentCenterData
 
   // list all layer options
   for (let i = 0; i < volumeMeta.volume.length; i++) {
@@ -103,7 +105,7 @@ function updateGUI(viewerList) {
   if (gui) { gui.destroy() }
 
   gui = new GUI()
-  gui.title('2023/11/19')
+  gui.title('2023/11/21')
   gui.add({ select: mode }, 'select', [ 'layer', 'segment' ]).name('mode').onChange((mode) => {
     viewerList.select = mode
     setMode(viewerList)
@@ -224,11 +226,14 @@ function setSegmentLabeling(viewer) {
     const labelDiv = document.querySelector('#label')
     if (labelDiv) labelDiv.style.display = 'none'
 
-    // only this line is important
     const p = viewer.getLabel(mouse)
     if (!p) { return }
 
-    // const { id, clip } = sTarget
+    // draw all related points when clicking
+    const c = viewer.getCenter(p.x, p.y, p.z)
+    const intersects = viewer.getIntersectFromCenter(c.x, c.y, c.z, p.x, p.y, p.z)
+    viewer.drawMarker(intersects)
+
     labelDiv.style.display = 'inline'
     labelDiv.style.left = (e.clientX + 20) + 'px'
     labelDiv.style.top = (e.clientY + 20) + 'px'

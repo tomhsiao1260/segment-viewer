@@ -11,6 +11,8 @@ export default class Loader {
 
   static getSegmentLayerMeta() { return fetch('segment-layer/meta.json').then((res) => res.json()) }
 
+  static getSegmentCenterData() { return new OBJLoader().loadAsync('segment-layer/scroll1_center.obj') }
+
   static getSubVolumeMeta(folder) { return fetch(`volume/${folder}/meta.json`).then((res) => res.json()) }
 
   static getSubSegmentMeta(folder) { return fetch(`segment/${folder}/meta.json`).then((res) => res.json()) }

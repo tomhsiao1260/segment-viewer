@@ -23,12 +23,14 @@ export default class ViewerSegment {
     this.originGeoList = []
     this.flattenGeoList = []
     this.meshVirtualList = []
+    this.markerList = []
 
     this.params = {}
     this.params.mode = 'segment'
-    this.params.segmentLayers = params.segmentLayers
     this.params.flatten = 1.0
     this.params.inklabels = true
+    this.params.segmentLayers = params.segmentLayers
+    this.params.segmentCenter = params.segmentCenter
 
     for (let i = 0; i < 15; i++) { this.params[i + 1] = true }
 
@@ -241,6 +243,17 @@ export default class ViewerSegment {
     })
   }
 
+  getScalingInfo() {
+    const center = this.inkMaterial.uniforms.uCenter.value
+
+    const select = this.params.segmentLayers.select
+    const sTarget = this.params.segmentLayers.segmentLayerMeta.segment[select]
+    const { clip } = sTarget
+    const s = 1 / ((clip.w + clip.h + clip.d) / 3)
+
+    return { center, s }
+  }
+
   getLabel(mouse) {
     const list = []
 
@@ -298,6 +311,96 @@ export default class ViewerSegment {
     }
   }
 
+  // nearest scroll center position (interpolation)
+  getCenter(x, y, z) {
+    const geometry = this.params.segmentCenter.children[0].geometry
+    const positions = geometry.getAttribute('position').array
+
+    const n = parseInt(positions.length / 3) - 1
+    const zMin = positions[0 * 3 + 2]
+    const zMax = positions[n * 3 + 2]
+
+    const zc = Math.max(zMin, Math.min(z, zMax))
+    const nc = n * (zc - zMin) / (zMax - zMin)
+    const ns = Math.floor(nc)
+    const ne = Math.ceil(nc)
+
+    const xs = positions[ns * 3 + 0]
+    const ys = positions[ns * 3 + 1]
+    const zs = positions[ns * 3 + 2]
+    const xe = positions[ne * 3 + 0]
+    const ye = positions[ne * 3 + 1]
+    const ze = positions[ne * 3 + 2]
+
+    const ds = Math.abs(zc - zs)
+    const de = Math.abs(zc - ze)
+    const xc = (xs * de + xe * ds) / (ds + de)
+    const yc = (ys * de + ye * ds) / (ds + de)
+
+    return { x: xc, y: yc, z }
+  }
+
+  // intersect UV points for a ray casting from the scroll center
+  getIntersectFromCenter(xo, yo, zo, xp, yp, zp) {
+    // only select activate pieces
+    const list = []
+
+    this.meshList.forEach((mesh, i) => {
+      const index = mesh.userData.index
+      if (this.params[ index ]) { list.push(mesh) }
+    })
+
+    // casting ray
+    const { center, s } = this.getScalingInfo()
+    const rayOrigin = new THREE.Vector3(xo, yo, zo).sub(center).multiplyScalar(s)
+    const rayPoint = new THREE.Vector3(xp, yp, zp).sub(center).multiplyScalar(s)
+    const rayDirection = rayPoint.sub(rayOrigin).normalize()
+
+    const raycaster = new THREE.Raycaster()
+    raycaster.set(rayOrigin, rayDirection)
+
+    const intersects = raycaster.intersectObjects(list)
+    return intersects
+  }
+
+  drawMarker(intersects) {
+    if (this.params.flatten < 0.98) return
+    const { center, s } = this.getScalingInfo()
+
+    // generate random color
+    const color = { value: '#', palette: '89ABCDEF' }
+    for (let i = 0; i < 6; i++) {
+      color.value += color.palette[ Math.floor(Math.random() * color.palette.length) ]
+    }
+
+    // draw marker on the flatten plane via UV coordinate
+    intersects.forEach(({ uv }) => {
+      const area = this.inkMaterial.uniforms.uArea.value
+      const tifsize = this.inkMaterial.uniforms.uTifsize.value
+      const flip = 1
+      const r = tifsize.y / tifsize.x
+      const scale = Math.sqrt(area / r)
+
+      const dir = new THREE.Vector3((0.5 - uv.x) * 1.0, (0.5 - uv.y) * r * flip, 0.0)
+
+      const flattenX = center.x + dir.x * scale
+      const flattenY = center.y + dir.y * scale
+      const flattenZ = center.z + dir.z * scale
+
+      const x = (flattenX - center.x) * s
+      const y = (flattenY - center.y) * s
+      const z = (flattenZ - center.z) * s
+
+      const geometry = new THREE.SphereGeometry(0.005, 6, 6)
+      const material = new THREE.MeshBasicMaterial({ color: color.value })
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.position.set(x, y, z)
+
+      this.markerList.push(mesh)
+      this.scene.add(mesh)
+    })
+  }
+
   render() {
     if (!this.renderer || this.controlDOM.style.display  !== 'inline') return
 
@@ -307,6 +410,9 @@ export default class ViewerSegment {
       this.inkMaterial.uniforms.uFlatten.value = this.params.flatten
       mesh.material = this.params.inklabels ? this.inkMaterial : this.normalMaterial
     })
+
+    const visible = this.params.flatten > 0.98
+    this.markerList.forEach((mesh) => { mesh.visible = visible })
 
     this.renderer.render(this.scene, this.camera)
   }
@@ -344,9 +450,18 @@ export default class ViewerSegment {
       this.scene.remove(mesh)
     })
 
+    this.markerList.forEach((mesh) => {
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+      mesh.geometry = null
+      mesh.material = null
+      this.scene.remove(mesh)
+    })
+
     this.meshList = []
     this.originGeoList = []
     this.flattenGeoList = []
     this.meshVirtualList = []
+    this.markerList = []
   }
 }
