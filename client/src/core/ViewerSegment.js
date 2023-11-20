@@ -28,7 +28,9 @@ export default class ViewerSegment {
     this.params = {}
     this.params.mode = 'segment'
     this.params.flatten = 1.0
+    this.params.surface = false
     this.params.inklabels = true
+    this.params.marker = true
     this.params.segmentLayers = params.segmentLayers
     this.params.segmentCenter = params.segmentCenter
 
@@ -107,6 +109,7 @@ export default class ViewerSegment {
     this.inkMaterial.uniforms.uCenter.value = center
     this.inkMaterial.uniforms.uTifsize.value = new THREE.Vector2(surfaceTexture.image.width, surfaceTexture.image.height)
     this.inkMaterial.uniforms.uFlatten.value = this.params.flatten
+    this.inkMaterial.uniforms.uInklabels.value = this.params.inklabels
 
     chunk.forEach((sID_Layer, i) => {
       const loading = Loader.getSegmentLayerData(`${id}/${sID_Layer}.obj`)
@@ -255,6 +258,7 @@ export default class ViewerSegment {
   }
 
   getLabel(mouse) {
+    if (this.params.surface) return
     const list = []
 
     // only select activate pieces
@@ -407,11 +411,12 @@ export default class ViewerSegment {
     this.meshList.forEach((mesh) => {
       const index = mesh.userData.index
       mesh.visible = this.params[index]
+      mesh.material = this.params.surface ? this.normalMaterial : this.inkMaterial
       this.inkMaterial.uniforms.uFlatten.value = this.params.flatten
-      mesh.material = this.params.inklabels ? this.inkMaterial : this.normalMaterial
+      this.inkMaterial.uniforms.uInklabels.value = this.params.inklabels
     })
 
-    const visible = this.params.flatten > 0.98
+    const visible = !this.params.surface && this.params.marker && this.params.flatten > 0.98
     this.markerList.forEach((mesh) => { mesh.visible = visible })
 
     this.renderer.render(this.scene, this.camera)

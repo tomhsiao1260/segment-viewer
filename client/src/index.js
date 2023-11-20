@@ -145,7 +145,6 @@ function updateGUI(viewerList) {
       updateViewer(viewer, 'segment')
       updateGUI(viewerList)
     })
-    gui.add(viewer.params, 'inklabels').onChange(viewer.render)
 
     const flattenController = gui.add(viewer.params, 'flatten', 0, 1, 0.01)
     flattenController.onChange(viewer.render)
@@ -156,6 +155,12 @@ function updateGUI(viewerList) {
 
     const { select, segmentLayerMeta } = viewer.params.segmentLayers
     segmentLayerMeta.segment[select].chunk.forEach((v, i) => { gui.add(viewer.params, i+1).listen().onChange(viewer.render) })
+
+    const folder = gui.addFolder('options')
+    folder.add(viewer.params, 'surface').onChange(viewer.render)
+    folder.add(viewer.params, 'inklabels').onChange(viewer.render)
+    folder.add(viewer.params, 'marker').onChange(viewer.render)
+    folder.close()
   }
 }
 
