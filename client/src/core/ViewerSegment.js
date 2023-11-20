@@ -203,6 +203,7 @@ export default class ViewerSegment {
       meshV.userData = mesh.userData
       meshV.scale.set(s, s, s)
       meshV.position.copy(center.clone().multiplyScalar(-s))
+      meshV.visible = false
       this.meshVirtualList.push(meshV)
       this.scene.add(meshV)
     })
@@ -236,6 +237,7 @@ export default class ViewerSegment {
 
       meshV.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c_positions), 3))
       meshV.geometry.computeVertexNormals()
+      meshV.geometry.computeBoundingSphere()
     })
   }
 
@@ -256,7 +258,6 @@ export default class ViewerSegment {
     // use intersect point & uv to trace back to the original position
     const { uv, face, object } = intersects[0]
     const { index } = object.userData
-    console.log(intersects[0])
 
     // find that point (weighted average on a intersect triangle)
     for (let i = 0; i < this.originGeoList.length; i++) {
@@ -302,7 +303,6 @@ export default class ViewerSegment {
 
     this.meshList.forEach((mesh) => {
       const index = mesh.userData.index
-      // mesh.visible = false
       mesh.visible = this.params[index]
       this.inkMaterial.uniforms.uFlatten.value = this.params.flatten
       mesh.material = this.params.inklabels ? this.inkMaterial : this.normalMaterial
