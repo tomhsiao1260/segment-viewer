@@ -12,6 +12,7 @@ export class FragmentShader extends ShaderMaterial {
         uCenter: { value: null },
         uTifsize: { value: null },
         uInklabels: { value: true },
+        uColor: { value: true },
         uFlatten: { value: 0.0 },
         uArea: { value: 0.0 },
         opacity: { value: 1.0 }
@@ -56,6 +57,7 @@ export class FragmentShader extends ShaderMaterial {
       fragmentShader: /* glsl */ `
         uniform float opacity;
         uniform bool uInklabels;
+        uniform bool uColor;
         uniform sampler2D uMask;
         uniform sampler2D tDiffuse;
         varying vec2 vUv;
@@ -66,7 +68,9 @@ export class FragmentShader extends ShaderMaterial {
           float maskI = mask.r;
           if (intensity < 0.0001) { gl_FragColor = vec4(0.0); return; }
 
-          vec3 color = intensity * 0.88 * vec3(0.93, 0.80, 0.70);
+          vec3 color;
+          if (uColor) color = intensity * 0.88 * vec3(0.93, 0.80, 0.70);
+          if (!uColor) color = vec3(intensity);
 
           if (maskI < 0.1 || !uInklabels) { gl_FragColor = vec4(color, 1.0); return; }
           gl_FragColor = vec4(color, 1.0) * (1.0 - 0.8 * maskI * opacity);

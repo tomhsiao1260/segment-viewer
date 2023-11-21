@@ -45,6 +45,7 @@ function setMode(viewerList) {
   viewerList.options.segment.controlDOM.style.display = 'none'
   viewer.controlDOM.style.display = 'inline'
 
+  viewer.setURLParamState()
   if (mode === 'layer') updateViewer(viewer, 'layer')
   if (mode === 'segment') updateViewer(viewer, 'segment')
 
@@ -92,6 +93,7 @@ async function updateViewer(viewer, mode) {
   if (mode === 'segment') {
     viewer.clear()
     await viewer.updateSegment()
+    viewer.updateGeometry()
     viewer.render()
   }
 }
@@ -157,9 +159,10 @@ function updateGUI(viewerList) {
     segmentLayerMeta.segment[select].chunk.forEach((v, i) => { gui.add(viewer.params, i+1).listen().onChange(viewer.render) })
 
     const folder = gui.addFolder('options')
-    folder.add(viewer.params, 'surface').onChange(viewer.render)
+    folder.add(viewer.params, 'color').onChange(viewer.render)
     folder.add(viewer.params, 'inklabels').onChange(viewer.render)
     folder.add(viewer.params, 'marker').onChange(viewer.render)
+    folder.add(viewer.params, 'surface').onChange(viewer.render)
     folder.close()
   }
 }

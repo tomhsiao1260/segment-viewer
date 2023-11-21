@@ -38,6 +38,7 @@ export default class ViewerLayer {
 
     this.card = null
     this.cardList = []
+    this.marker = []
 
     this.init()
   }
@@ -87,11 +88,27 @@ export default class ViewerLayer {
     this.cmtexture.minFilter = THREE.NearestFilter
     this.cmtexture.magFilter = THREE.NearestFilter
 
-    // set state via url params
+    // marker at the screen center
+    const materialMarker = new THREE.MeshBasicMaterial()
+    const geoH = new THREE.BoxGeometry(0.005, 0.03, 0.01)
+    const geoV = new THREE.BoxGeometry(0.03, 0.005, 0.01)
+    const meshH = new THREE.Mesh(geoH, materialMarker)
+    const meshV = new THREE.Mesh(geoV, materialMarker)
+    meshH.position.set(0, 0, -0.5)
+    meshV.position.set(0, 0, -0.5)
+    this.scene.add(meshH, meshV)
+    this.marker.push(meshH, meshV)
+  }
+
+  // set state via url params
+  setURLParamState() {
     const url = new URLSearchParams(window.location.search)
     if (url.get('zoom')) this.camera.zoom = parseFloat(url.get('zoom'))
-    if (url.get('layer')) this.params.layers.select = this.params.layers.options[ url.get('layer') ]
-    if (url.get('segment')) this.params.segments.select = this.params.segments.options[ url.get('segment') ]
+    if (url.get('layer')) {
+      const step = this.params.layers.getLayer[1] - this.params.layers.getLayer[0]
+      const layer = Math.round(url.get('layer') / step) * step
+      this.params.layers.select = this.params.layers.options[ layer ]
+    }
     if (url.get('x') && url.get('y')) {
       const pixelX = parseFloat(url.get('x'))
       const pixelY = parseFloat(url.get('y'))
@@ -101,6 +118,7 @@ export default class ViewerLayer {
       this.camera.position.x = x
       this.camera.position.y = y
     }
+    if (url.get('segment')) this.params.segments.select = this.params.segments.options[ url.get('segment') ]
     if(!this.params.segments.select) this.params.segments.select = 0
     this.camera.updateProjectionMatrix()
   }
@@ -163,8 +181,8 @@ export default class ViewerLayer {
     const layer = this.segmentMeta.layer[index]
 
     this.subSegmentMeta = await Loader.getSubSegmentMeta(layer)
-    this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
-    // if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
+    // this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
+    if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
 
     await this.updateClipGeometry()
     await this.updateFocusGeometry()
@@ -449,6 +467,13 @@ export default class ViewerLayer {
     this.cardList.forEach((card) => {
       card.material.uniforms.surface.value = this.params.surface
       card.material.uniforms.colorBool.value = this.params.colorBool
+    })
+
+    this.marker.forEach((mesh) => {
+      const sc = 1 / this.camera.zoom
+      mesh.position.x = this.camera.position.x
+      mesh.position.y = this.camera.position.y
+      mesh.scale.set(sc, sc, sc)
     })
 
     this.enhance()

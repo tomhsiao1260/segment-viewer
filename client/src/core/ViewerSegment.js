@@ -31,6 +31,7 @@ export default class ViewerSegment {
     this.params.surface = false
     this.params.inklabels = true
     this.params.marker = true
+    this.params.color = true
     this.params.segmentLayers = params.segmentLayers
     this.params.segmentCenter = params.segmentCenter
 
@@ -79,7 +80,10 @@ export default class ViewerSegment {
     this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN }
     this.controls.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN }
     this.controls.addEventListener('change', this.render)
+  }
 
+  // set state via url params
+  setURLParamState() {
     const url = new URLSearchParams(window.location.search)
     if (url.get('segment')) this.params.segmentLayers.select = this.params.segmentLayers.options[ url.get('segment') ]
     if(!this.params.segmentLayers.select) this.params.segmentLayers.select = 0
@@ -110,6 +114,7 @@ export default class ViewerSegment {
     this.inkMaterial.uniforms.uTifsize.value = new THREE.Vector2(surfaceTexture.image.width, surfaceTexture.image.height)
     this.inkMaterial.uniforms.uFlatten.value = this.params.flatten
     this.inkMaterial.uniforms.uInklabels.value = this.params.inklabels
+    this.inkMaterial.uniforms.uColor.value = this.params.color
 
     chunk.forEach((sID_Layer, i) => {
       const loading = Loader.getSegmentLayerData(`${id}/${sID_Layer}.obj`)
@@ -414,6 +419,7 @@ export default class ViewerSegment {
       mesh.material = this.params.surface ? this.normalMaterial : this.inkMaterial
       this.inkMaterial.uniforms.uFlatten.value = this.params.flatten
       this.inkMaterial.uniforms.uInklabels.value = this.params.inklabels
+      this.inkMaterial.uniforms.uColor.value = this.params.color
     })
 
     const visible = !this.params.surface && this.params.marker && this.params.flatten > 0.98
@@ -431,20 +437,14 @@ export default class ViewerSegment {
       this.scene.remove(mesh)
     })
 
-    this.originGeoList.forEach((mesh) => {
-      mesh.geometry.dispose()
-      mesh.material.dispose()
-      mesh.geometry = null
-      mesh.material = null
-      this.scene.remove(mesh)
+    this.originGeoList.forEach((geometry) => {
+      geometry.dispose()
+      geometry = null
     })
 
-    this.flattenGeoList.forEach((mesh) => {
-      mesh.geometry.dispose()
-      mesh.material.dispose()
-      mesh.geometry = null
-      mesh.material = null
-      this.scene.remove(mesh)
+    this.flattenGeoList.forEach((geometry) => {
+      geometry.dispose()
+      geometry = null
     })
 
     this.meshVirtualList.forEach((mesh) => {
