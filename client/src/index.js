@@ -179,7 +179,36 @@ function updateGUI(viewerList) {
     folder.add(viewer.params, 'inklabels').onChange(viewer.render)
     folder.add(viewer.params, 'marker').onChange(viewer.render)
     folder.add(viewer.params, 'surface').onChange(viewer.render)
+    uploadPredition(folder, viewer)
     folder.close()
+  }
+}
+
+// gui button for users to upload their personal ink predictions
+function uploadPredition(gui, viewer) {
+  const fileInput = { div: document.querySelector('#predition') }
+
+  if (!fileInput.div) {
+    fileInput.div = document.createElement('input')
+    fileInput.div.id = 'predition'
+    fileInput.div.type = 'file'
+    fileInput.div.accept = 'image/*'
+    fileInput.div.style.display = 'none'
+    fileInput.div.addEventListener('change', handleFileSelect, false)
+    document.body.appendChild(fileInput.div)
+  }
+  gui.add({ loadFile: () => fileInput.div.click() }, 'loadFile').name('Upload Predition')
+
+  function handleFileSelect(e) {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = function (event) {
+        const maskURL = event.target.result
+        viewer.uploadPredition(maskURL)
+      }
+      reader.readAsDataURL(file)
+    }
   }
 }
 

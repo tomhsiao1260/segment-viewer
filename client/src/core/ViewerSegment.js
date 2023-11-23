@@ -153,6 +153,12 @@ export default class ViewerSegment {
     window.history.replaceState(undefined, undefined, url.href)
   }
 
+  async uploadPredition(maskURL) {
+    const maskTexture = await new THREE.TextureLoader().loadAsync(maskURL)
+    this.inkMaterial.uniforms.uMask.value = maskTexture
+    this.render()
+  }
+
   calculateGeometry() {
     const center = this.inkMaterial.uniforms.uCenter.value
     const area = this.inkMaterial.uniforms.uArea.value
@@ -481,6 +487,14 @@ export default class ViewerSegment {
       mesh.material = null
       this.scene.remove(mesh)
     })
+
+    if (this.inkMaterial) {
+      const surfaceTexture = this.inkMaterial.uniforms.tDiffuse.value
+      const maskTexture = this.inkMaterial.uniforms.uMask.value
+      surfaceTexture.dispose()
+      maskTexture.dispose()
+      this.inkMaterial.dispose()
+    }
 
     this.meshList = []
     this.originGeoList = []
