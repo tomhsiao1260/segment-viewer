@@ -95,6 +95,19 @@ async function updateViewer(viewer, mode) {
     await viewer.updateSegment()
     viewer.updateGeometry()
     viewer.render()
+
+    // draw all related points when clicking
+    const url = new URLSearchParams(window.location.search)
+    const x = parseInt(url.get('x'))
+    const y = parseInt(url.get('y'))
+    const z = parseInt(url.get('layer'))
+
+    if (x && y && z) {
+      const c = viewer.getCenter(x, y, z)
+      const intersects = viewer.getIntersectFromCenter(c.x, c.y, c.z, x, y, z)
+      viewer.drawMarker(intersects)
+    }
+    viewer.render()
   }
 }
 
