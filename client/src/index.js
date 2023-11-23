@@ -29,7 +29,7 @@ async function init() {
   const viewerList = { select: mode, options: { 'layer': vLayer, 'segment': vSegment } }
   setMode(viewerList)
 
-  setLoading(vLayer)
+  setLoading(vLayer, vSegment)
   setLayerLabeling(vLayer)
   setSegmentLabeling(vSegment)
 }
@@ -91,6 +91,7 @@ async function updateViewer(viewer, mode) {
     viewer.loading = false
   }
   if (mode === 'segment') {
+    viewer.loading = true
     viewer.clear()
     await viewer.updateSegment()
     viewer.updateGeometry()
@@ -107,7 +108,9 @@ async function updateViewer(viewer, mode) {
       const intersects = viewer.getIntersectFromCenter(c.x, c.y, c.z, x, y, z)
       viewer.drawMarker(intersects)
     }
+
     viewer.render()
+    viewer.loading = false
   }
 }
 
@@ -181,14 +184,15 @@ function updateGUI(viewerList) {
 }
 
 // loading div element
-function setLoading(viewer) {
+function setLoading(vLayer, vSegment) {
   const loadingDiv = document.createElement('div')
   loadingDiv.id = 'loading'
   loadingDiv.innerHTML = 'Loading ...'
   document.body.appendChild(loadingDiv)
 
   window.setInterval(() => {
-    loadingDiv.style.display = viewer.loading ? 'inline' : 'none'
+    const isLoading = vLayer.loading || vSegment.loading
+    loadingDiv.style.display = isLoading ? 'inline' : 'none'
   }, 500)
 }
 
