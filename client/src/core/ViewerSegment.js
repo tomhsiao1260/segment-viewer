@@ -378,7 +378,6 @@ export default class ViewerSegment {
   }
 
   drawMarker(intersects) {
-    if (this.params.flatten < 0.98) return
     const { center, s } = this.getScalingInfo()
 
     // generate random color
@@ -388,7 +387,7 @@ export default class ViewerSegment {
     }
 
     // draw marker on the flatten plane via UV coordinate
-    intersects.forEach(({ uv }) => {
+    intersects.forEach(({ uv, point }) => {
       const area = this.inkMaterial.uniforms.uArea.value
       const tifsize = this.inkMaterial.uniforms.uTifsize.value
       const flip = 1
@@ -401,14 +400,21 @@ export default class ViewerSegment {
       const flattenY = center.y + dir.y * scale
       const flattenZ = center.z + dir.z * scale
 
-      const x = (flattenX - center.x) * s
-      const y = (flattenY - center.y) * s
-      const z = (flattenZ - center.z) * s
+      const fx = (flattenX - center.x) * s
+      const fy = (flattenY - center.y) * s
+      const fz = (flattenZ - center.z) * s
+
+      const originPoint = point.clone()
+      const flattenPoint = new THREE.Vector3(fx, fy, fz)
+      const fp = flattenPoint.clone().multiplyScalar(this.params.flatten)
+      const op = originPoint.clone().multiplyScalar(1 - this.params.flatten)
+      const currentPoint = fp.add(op)
 
       const geometry = new THREE.SphereGeometry(0.005, 6, 6)
       const material = new THREE.MeshBasicMaterial({ color: color.value })
       const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(x, y, z)
+      mesh.userData = { originPoint, flattenPoint }
+      mesh.position.copy(currentPoint)
 
       this.markerList.push(mesh)
       this.scene.add(mesh)
@@ -427,8 +433,16 @@ export default class ViewerSegment {
       this.inkMaterial.uniforms.uColor.value = this.params.color
     })
 
-    const visible = !this.params.surface && this.params.marker && this.params.flatten > 0.98
-    this.markerList.forEach((mesh) => { mesh.visible = visible })
+    const visible = !this.params.surface && this.params.marker
+    this.markerList.forEach((mesh) => {
+      const { originPoint, flattenPoint } = mesh.userData
+      const fp = flattenPoint.clone().multiplyScalar(this.params.flatten)
+      const op = originPoint.clone().multiplyScalar(1 - this.params.flatten)
+      const currentPoint = fp.add(op)
+
+      mesh.position.copy(currentPoint)
+      mesh.visible = visible
+    })
 
     this.renderer.render(this.scene, this.camera)
   }
