@@ -34,11 +34,11 @@ export class FragmentShader extends ShaderMaterial {
 
         void main()
         {
-            float flip = 1.0;
+            float flip = -1.0;
             float r = uTifsize.y / uTifsize.x;
             // float flip = uFlip ? -1.0 : 1.0;
 
-            vec3 dir = (0.5 - uv.x) * vec3(1.0, 0.0, 0.0) + (0.5 - uv.y) * vec3(0.0, 1.0, 0.0) * r * flip;
+            vec3 dir = (uv.x - 0.5) * vec3(1.0, 0.0, 0.0) + (uv.y - 0.5) * vec3(0.0, 1.0, 0.0) * flip * r;
             vec3 flatten = uCenter + dir * sqrt(uArea / r);
             // vec3 dir = (0.5 - uv.x) * uBasevectorX + (0.5 - uv.y) * uBasevectorY * r * flip;
 

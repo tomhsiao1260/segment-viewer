@@ -153,7 +153,7 @@ export default class ViewerSegment {
     window.history.replaceState(undefined, undefined, url.href)
   }
 
-  async uploadPredition(maskURL) {
+  async uploadPrediction(maskURL) {
     const maskTexture = await new THREE.TextureLoader().loadAsync(maskURL)
     this.inkMaterial.uniforms.uMask.value = maskTexture
     this.render()
@@ -170,7 +170,7 @@ export default class ViewerSegment {
     const s = 1 / ((clip.w + clip.h + clip.d) / 3)
 
     this.meshList.forEach((mesh, i) => {
-      const flip = 1
+      const flip = -1
       const r = tifsize.y / tifsize.x
       const scale = Math.sqrt(area / r)
 
@@ -193,7 +193,7 @@ export default class ViewerSegment {
         const uvx = uvs[2 * i + 0]
         const uvy = uvs[2 * i + 1]
 
-        const dir = new THREE.Vector3((0.5 - uvx) * 1.0, (0.5 - uvy) * r * flip, 0.0)
+        const dir = new THREE.Vector3((uvx - 0.5) * 1.0, (uvy - 0.5) * flip * r, 0.0)
 
         const flattenX = center.x + dir.x * scale
         const flattenY = center.y + dir.y * scale
@@ -288,6 +288,21 @@ export default class ViewerSegment {
     const intersects = raycaster.intersectObjects(list)
     if (!intersects.length) return
 
+    const { x, y, z } = this.getPositionFromIntersect(intersects)
+    if (!x || !y || !z) return
+
+    const url = new URL(window.location.href)
+    const searchParams = url.searchParams
+    searchParams.set('x', x)
+    searchParams.set('y', y)
+    searchParams.set('layer', z)
+    url.search = searchParams.toString()
+    window.history.replaceState(undefined, undefined, url.href)
+
+    return { x, y, z }
+  }
+
+  getPositionFromIntersect(intersects) {
     // use intersect point & uv to trace back to the original position
     const { uv, face, object } = intersects[0]
     const { index } = object.userData
@@ -319,20 +334,12 @@ export default class ViewerSegment {
       const y = Math.round(pa.y * wa + pb.y * wb + pc.y * wc)
       const z = Math.round(pa.z * wa + pb.z * wb + pc.z * wc)
 
-      const url = new URL(window.location.href)
-      const searchParams = url.searchParams
-      searchParams.set('x', x)
-      searchParams.set('y', y)
-      searchParams.set('layer', z)
-      url.search = searchParams.toString()
-      window.history.replaceState(undefined, undefined, url.href)
-
       return { x, y, z }
     }
   }
 
   // nearest scroll center position (interpolation)
-  getCenter(x, y, z) {
+  getCenter(z) {
     const geometry = this.params.segmentCenter.children[0].geometry
     const positions = geometry.getAttribute('position').array
 
@@ -352,8 +359,8 @@ export default class ViewerSegment {
     const ye = positions[ne * 3 + 1]
     const ze = positions[ne * 3 + 2]
 
-    const ds = Math.abs(zc - zs)
-    const de = Math.abs(zc - ze)
+    const ds = (zc === zs) ? 0.0001: Math.abs(zc - zs)
+    const de = (zc === ze) ? 0.0001: Math.abs(zc - ze)
     const xc = (xs * de + xe * ds) / (ds + de)
     const yc = (ys * de + ye * ds) / (ds + de)
 
@@ -396,11 +403,11 @@ export default class ViewerSegment {
     intersects.forEach(({ uv, point }) => {
       const area = this.inkMaterial.uniforms.uArea.value
       const tifsize = this.inkMaterial.uniforms.uTifsize.value
-      const flip = 1
+      const flip = -1
       const r = tifsize.y / tifsize.x
       const scale = Math.sqrt(area / r)
 
-      const dir = new THREE.Vector3((0.5 - uv.x) * 1.0, (0.5 - uv.y) * r * flip, 0.0)
+      const dir = new THREE.Vector3((uv.x - 0.5) * 1.0, (uv.y - 0.5) * flip * r, 0.0)
 
       const flattenX = center.x + dir.x * scale
       const flattenY = center.y + dir.y * scale
@@ -425,6 +432,8 @@ export default class ViewerSegment {
       this.markerList.push(mesh)
       this.scene.add(mesh)
     })
+
+    return color.value
   }
 
   render() {

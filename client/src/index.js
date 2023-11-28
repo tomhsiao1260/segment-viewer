@@ -104,7 +104,7 @@ async function updateViewer(viewer, mode) {
     const z = parseInt(url.get('layer'))
 
     if (x && y && z) {
-      const c = viewer.getCenter(x, y, z)
+      const c = viewer.getCenter(z)
       const intersects = viewer.getIntersectFromCenter(c.x, c.y, c.z, x, y, z)
       viewer.drawMarker(intersects)
     }
@@ -179,25 +179,25 @@ function updateGUI(viewerList) {
     folder.add(viewer.params, 'inklabels').onChange(viewer.render)
     folder.add(viewer.params, 'marker').onChange(viewer.render)
     folder.add(viewer.params, 'surface').onChange(viewer.render)
-    uploadPredition(folder, viewer)
+    uploadPrediction(folder, viewer)
     folder.close()
   }
 }
 
 // gui button for users to upload their personal ink predictions
-function uploadPredition(gui, viewer) {
-  const fileInput = { div: document.querySelector('#predition') }
+function uploadPrediction(gui, viewer) {
+  const fileInput = { div: document.querySelector('#prediction') }
 
   if (!fileInput.div) {
     fileInput.div = document.createElement('input')
-    fileInput.div.id = 'predition'
+    fileInput.div.id = 'prediction'
     fileInput.div.type = 'file'
     fileInput.div.accept = 'image/*'
     fileInput.div.style.display = 'none'
     fileInput.div.addEventListener('change', handleFileSelect, false)
     document.body.appendChild(fileInput.div)
   }
-  gui.add({ loadFile: () => fileInput.div.click() }, 'loadFile').name('Upload Predition')
+  gui.add({ loadFile: () => fileInput.div.click() }, 'loadFile').name('Upload Prediction')
 
   function handleFileSelect(e) {
     const file = e.target.files[0]
@@ -205,7 +205,7 @@ function uploadPredition(gui, viewer) {
       const reader = new FileReader()
       reader.onload = function (event) {
         const maskURL = event.target.result
-        viewer.uploadPredition(maskURL)
+        viewer.uploadPrediction(maskURL)
       }
       reader.readAsDataURL(file)
     }
@@ -284,7 +284,7 @@ function setSegmentLabeling(viewer) {
     if (!p) { return }
 
     // draw all related points when clicking
-    const c = viewer.getCenter(p.x, p.y, p.z)
+    const c = viewer.getCenter(p.z)
     const intersects = viewer.getIntersectFromCenter(c.x, c.y, c.z, p.x, p.y, p.z)
     viewer.drawMarker(intersects)
 
@@ -293,5 +293,57 @@ function setSegmentLabeling(viewer) {
     labelDiv.style.top = (e.clientY + 20) + 'px'
     labelDiv.innerHTML = `x: ${p.x}<br/>y: ${p.y}<br/>z: ${p.z}`
   })
+
+  // screen shot for analyzing
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space') return
+
+    viewer.render()
+    snapshotOnce(viewer, 'origin')
+
+    // zLayer that you want to analyze
+    const zLayers = [ 1050, 3650, 5050, 7200, 8800, 12000 ]
+    const meta = []
+
+    zLayers.forEach(zLayer => {
+      const c = viewer.getCenter(zLayer)
+      const r = 4000
+      const dotNum = 20
+
+      for (let i = 0; i < dotNum; i++) {
+        const theta = 2 * Math.PI * (i / dotNum)
+        const intersects = viewer.getIntersectFromCenter(c.x, c.y, c.z, c.x + r * Math.cos(theta), c.y + r * Math.sin(theta), c.z)
+        const color = viewer.drawMarker(intersects)
+        const { x, y, z } = viewer.getPositionFromIntersect(intersects)
+
+        meta.push({ zLayer, i, x, y, color })
+      }
+    })
+    saveJson(meta, 'meta')
+
+    viewer.meshList.forEach((mesh, i) => { viewer.params[i] = (i % 2 === 0) })
+    viewer.render()
+    snapshotOnce(viewer, 'even')
+    viewer.meshList.forEach((mesh, i) => { viewer.params[i] = (i % 2 === 1) })
+    viewer.render()
+    snapshotOnce(viewer, 'odd')
+  })
+}
+
+async function snapshotOnce(viewer, filename) {
+  const imgData = viewer.renderer.domElement.toDataURL('image/png')
+  const link = document.createElement('a')
+  link.href = imgData
+  link.download = filename
+  link.click()
+}
+
+async function saveJson(data, filename) {
+  const json = JSON.stringify(data, null, 2)
+  const blob = new Blob([ json ], { type: 'application/json' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = filename
+  link.click()
 }
 
