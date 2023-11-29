@@ -390,14 +390,8 @@ export default class ViewerSegment {
     return intersects
   }
 
-  drawMarker(intersects) {
+  drawMarker(intersects, color) {
     const { center, s } = this.getScalingInfo()
-
-    // generate random color
-    const color = { value: '#', palette: '89ABCDEF' }
-    for (let i = 0; i < 6; i++) {
-      color.value += color.palette[ Math.floor(Math.random() * color.palette.length) ]
-    }
 
     // draw marker on the flatten plane via UV coordinate
     intersects.forEach(({ uv, point }) => {
@@ -424,7 +418,7 @@ export default class ViewerSegment {
       const currentPoint = fp.add(op)
 
       const geometry = new THREE.SphereGeometry(0.005, 6, 6)
-      const material = new THREE.MeshBasicMaterial({ color: color.value })
+      const material = new THREE.MeshBasicMaterial({ color })
       const mesh = new THREE.Mesh(geometry, material)
       mesh.userData = { originPoint, flattenPoint }
       mesh.position.copy(currentPoint)
@@ -432,8 +426,6 @@ export default class ViewerSegment {
       this.markerList.push(mesh)
       this.scene.add(mesh)
     })
-
-    return color.value
   }
 
   render() {

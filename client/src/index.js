@@ -106,7 +106,8 @@ async function updateViewer(viewer, mode) {
     if (x && y && z) {
       const c = viewer.getCenter(z)
       const intersects = viewer.getIntersectFromCenter(c.x, c.y, c.z, x, y, z)
-      viewer.drawMarker(intersects)
+      const color = randomColor()
+      viewer.drawMarker(intersects, color)
     }
 
     viewer.render()
@@ -286,7 +287,8 @@ function setSegmentLabeling(viewer) {
     // draw all related points when clicking
     const c = viewer.getCenter(p.z)
     const intersects = viewer.getIntersectFromCenter(c.x, c.y, c.z, p.x, p.y, p.z)
-    viewer.drawMarker(intersects)
+    const color = randomColor()
+    viewer.drawMarker(intersects, color)
 
     labelDiv.style.display = 'inline'
     labelDiv.style.left = (e.clientX + 20) + 'px'
@@ -304,22 +306,27 @@ function setSegmentLabeling(viewer) {
     // zLayer that you want to analyze
     const zLayers = [ 1050, 3650, 5050, 7200, 8800, 12000 ]
     const meta = []
+    const center = []
 
     zLayers.forEach(zLayer => {
       const c = viewer.getCenter(zLayer)
+      center.push({ zLayer, x: parseInt(c.x), y: parseInt(c.y) })
+
       const r = 4000
       const dotNum = 20
+      const colors = [ '#E8DDFC', '#BB99FB', '#E9AEDC', '#99BBCD', '#FEFECD', '#DCEAEC', '#FDCFB8', '#F9F88B', '#BDF8B9', '#CC8ABF', '#ACDADF', '#E8DFBC', '#CB9DE9', '#DEBBBD', '#D8EAEC', '#8CAE8D', '#DA8BAD', '#9CFDEE', '#BDFDBF', '#EDFA9E' ]
 
       for (let i = 0; i < dotNum; i++) {
         const theta = 2 * Math.PI * (i / dotNum)
         const intersects = viewer.getIntersectFromCenter(c.x, c.y, c.z, c.x + r * Math.cos(theta), c.y + r * Math.sin(theta), c.z)
-        const color = viewer.drawMarker(intersects)
         const { x, y, z } = viewer.getPositionFromIntersect(intersects)
+        const color = colors[i]
+        viewer.drawMarker(intersects, color)
 
         meta.push({ zLayer, i, x, y, color })
       }
     })
-    saveJson(meta, 'meta')
+    saveJson({ center, meta }, 'meta')
 
     viewer.meshList.forEach((mesh, i) => { viewer.params[i] = (i % 2 === 0) })
     viewer.render()
@@ -328,6 +335,15 @@ function setSegmentLabeling(viewer) {
     viewer.render()
     snapshotOnce(viewer, 'odd')
   })
+}
+
+// generate random color
+function randomColor() {
+  const color = { value: '#', palette: '89ABCDEF' }
+  for (let i = 0; i < 6; i++) {
+    color.value += color.palette[ Math.floor(Math.random() * color.palette.length) ]
+  }
+  return color.value
 }
 
 async function snapshotOnce(viewer, filename) {
