@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import Loader from './Loader'
 import ViewerLayer from './core/ViewerLayer'
 import ViewerSegment from './core/ViewerSegment'
+import ViewerWrapping from './core/ViewerWrapping'
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min'
 
 init()
@@ -23,10 +24,11 @@ async function init() {
 
   const vLayer = new ViewerLayer({ params, renderer, canvas })
   const vSegment = new ViewerSegment({ params, renderer, canvas })
+  const vWrapping = new ViewerWrapping({ params, renderer, canvas })
 
   const url = new URLSearchParams(window.location.search)
   const mode = url.get('mode') ? url.get('mode') : 'segment'
-  const viewerList = { select: mode, options: { 'layer': vLayer, 'segment': vSegment } }
+  const viewerList = { select: mode, options: { 'layer': vLayer, 'segment': vSegment, 'wrapping': vWrapping } }
   setMode(viewerList)
 
   setLoading(vLayer, vSegment)
@@ -43,11 +45,13 @@ function setMode(viewerList) {
 
   viewerList.options.layer.controlDOM.style.display = 'none'
   viewerList.options.segment.controlDOM.style.display = 'none'
+  viewerList.options.wrapping.controlDOM.style.display = 'none'
   viewer.controlDOM.style.display = 'inline'
 
   viewer.setURLParamState()
   if (mode === 'layer') updateViewer(viewer, 'layer')
   if (mode === 'segment') updateViewer(viewer, 'segment')
+  if (mode === 'wrapping') updateViewer(viewer, 'wrapping')
 
   updateGUI(viewerList)
 }
@@ -113,6 +117,13 @@ async function updateViewer(viewer, mode) {
     viewer.render()
     viewer.loading = false
   }
+  if (mode === 'wrapping') {
+    viewer.loading = true
+    viewer.clear()
+    viewer.setup()
+    viewer.render()
+    viewer.loading = false
+  }
 }
 
 let gui
@@ -124,8 +135,8 @@ function updateGUI(viewerList) {
   if (gui) { gui.destroy() }
 
   gui = new GUI()
-  gui.title('2023/11/21')
-  gui.add({ select: mode }, 'select', [ 'layer', 'segment' ]).name('mode').onChange((mode) => {
+  gui.title('2024/01/24')
+  gui.add({ select: mode }, 'select', [ 'layer', 'segment', 'wrapping' ]).name('mode').onChange((mode) => {
     viewerList.select = mode
     setMode(viewerList)
   })
@@ -182,6 +193,10 @@ function updateGUI(viewerList) {
     folder.add(viewer.params, 'surface').onChange(viewer.render)
     uploadPrediction(folder, viewer)
     folder.close()
+  }
+
+  if (mode === 'wrapping') {
+    gui.add(viewer.params, 'wrapping', 0, 26.99, 0.01).name('wrapping').listen().onChange(viewer.updateWrapping)
   }
 }
 
