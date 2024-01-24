@@ -10,6 +10,7 @@ export class WrappingMaterial extends ShaderMaterial {
         tPosition: { value: null },
         tPositions: { value: null },
         tColor: { value: null },
+        tLabel: { value: null },
         tUV: { value: null },
         tUVs: { value: null },
         uWrapping: { value: 0 },
@@ -56,7 +57,7 @@ export class WrappingMaterial extends ShaderMaterial {
           vec3 newPosition = position;
           vec4 modelPosition = modelMatrix * vec4(newPosition, 1.0);
 
-          float flatten = 1.0 - smoothstep(uWrapPosition - 0.02, uWrapPosition, modelPosition.x);
+          float flatten = 1.0 - smoothstep(uWrapPosition - 0.01, uWrapPosition, modelPosition.x);
           modelPosition.xyz = pos3D + flatten * (modelPosition.xyz - pos3D);
 
           vec4 viewPosition = viewMatrix * modelPosition;
@@ -69,6 +70,7 @@ export class WrappingMaterial extends ShaderMaterial {
 
       fragmentShader: /* glsl */ `
         uniform sampler2D tColor;
+        uniform sampler2D tLabel;
 
         uniform sampler2D tUV;
         uniform sampler2D tUVs;
@@ -79,10 +81,13 @@ export class WrappingMaterial extends ShaderMaterial {
           vec4 uvm = texture2D(tUV, vUv) + texture2D(tUVs, vUv) / 255.0;
           // vec4 color = uvm;
           vec4 color = texture2D(tColor, uvm.xy);
+          vec4 label = texture2D(tLabel, uvm.xy);
 
           if (uvm.a < 0.5) discard;
 
-          gl_FragColor = color;
+          float intensity = color.r;
+          color.rgb = intensity * 0.88 * vec3(0.93, 0.80, 0.70);
+          gl_FragColor = color + label.r * (vec4(vec3(0.0), 1.0) - color);
         }
       `
     });

@@ -126,10 +126,11 @@ export default class ViewerWrapping {
     this.scene.add(this.mark)
 
     for (let i = 0; i < 4; i++) {
-      const { id: segID, positions, colors, scale, offset, chunks } = this.params.segment[i]
+      const { id: segID, labels, positions, colors, scale, offset, chunks } = this.params.segment[i]
       const posTexture = await new THREE.TextureLoader().loadAsync(`wrapping/${segID}/${positions}`)
       const possTexture = await new THREE.TextureLoader().loadAsync(`wrapping/${segID}/s/${positions}`)
       const colorTexture = await new TIFFLoader().loadAsync(`wrapping/${segID}/${colors}`)
+      const labelTexture = labels ? await new THREE.TextureLoader().loadAsync(`wrapping/${segID}/${labels}`) : null
 
       for (let j = 0; j < chunks.length; j++) {
         const { id, uv, width, height, l, r } = chunks[j]
@@ -137,7 +138,7 @@ export default class ViewerWrapping {
         const uvsTexture = await new THREE.TextureLoader().loadAsync(`wrapping/${segID}/s/${uv}`)
 
         let pos = this.getPosition(id + 0.5)
-        const material = this.setMaterial(posTexture, possTexture, uvTexture, uvsTexture, colorTexture)
+        const material = this.setMaterial(posTexture, possTexture, uvTexture, uvsTexture, colorTexture, labelTexture)
         const mesh = new THREE.Mesh(geometry, material)
         mesh.position.set(pos, st, 0)
         mesh.userData.segID = segID
@@ -219,7 +220,7 @@ export default class ViewerWrapping {
     })
   }
 
-  setMaterial(posTexture, possTexture, uvTexture, uvsTexture, colorTexture) {
+  setMaterial(posTexture, possTexture, uvTexture, uvsTexture, colorTexture, labelTexture) {
     const material = new WrappingMaterial()
     posTexture.minFilter = THREE.NearestFilter
     posTexture.magFilter = THREE.NearestFilter
@@ -240,6 +241,12 @@ export default class ViewerWrapping {
     colorTexture.minFilter = THREE.NearestFilter
     colorTexture.magFilter = THREE.NearestFilter
     material.uniforms.tColor.value = colorTexture
+
+    if (labelTexture) {
+      labelTexture.minFilter = THREE.NearestFilter
+      labelTexture.magFilter = THREE.NearestFilter
+      material.uniforms.tLabel.value = labelTexture
+    }
 
     return material
   }
