@@ -10,9 +10,10 @@ init()
 async function init() {
   const volumeMeta = await Loader.getVolumeMeta()
   const segmentMeta = await Loader.getSegmentMeta()
+  const wrappingMeta = await Loader.getWrappingMeta()
   const segmentLayerMeta = await Loader.getSegmentLayerMeta()
   const segmentCenterData = await Loader.getSegmentCenterData()
-  const params = setParams(volumeMeta, segmentMeta, segmentLayerMeta, segmentCenterData)
+  const params = setParams(volumeMeta, segmentMeta, wrappingMeta, segmentLayerMeta, segmentCenterData)
 
   // renderer setup
   const canvas = document.querySelector('.webgl')
@@ -31,7 +32,7 @@ async function init() {
   const viewerList = { select: mode, options: { 'layer': vLayer, 'segment': vSegment, 'wrapping': vWrapping } }
   setMode(viewerList)
 
-  setLoading(vLayer, vSegment)
+  setLoading(vLayer, vSegment, vWrapping)
   setLayerLabeling(vLayer)
   setSegmentLabeling(vSegment)
 }
@@ -56,10 +57,11 @@ function setMode(viewerList) {
   updateGUI(viewerList)
 }
 
-function setParams(volumeMeta, segmentMeta, segmentLayerMeta, segmentCenterData) {
+function setParams(volumeMeta, segmentMeta, wrappingMeta, segmentLayerMeta, segmentCenterData) {
   const params = {}
   params.layers = { select: 0, options: {}, getLayer: {}, volumeMeta }
   params.segments = { select: 0, options: {}, getID: {}, segmentMeta }
+  params.wrapping = { wrappingMeta }
   params.segmentLayers = { select: 0, options: {}, getID: {}, segmentLayerMeta }
   params.segmentCenter = segmentCenterData
 
@@ -120,7 +122,7 @@ async function updateViewer(viewer, mode) {
   if (mode === 'wrapping') {
     viewer.loading = true
     viewer.clear()
-    viewer.setup()
+    await viewer.setup()
     viewer.render()
     viewer.loading = false
   }
@@ -131,17 +133,18 @@ let gui
 function updateGUI(viewerList) {
   const mode = viewerList.select
   const viewer = viewerList.options[mode]
+  const date = '2024/01/24'
 
   if (gui) { gui.destroy() }
 
-  gui = new GUI()
-  gui.title('2024/01/24')
-  gui.add({ select: mode }, 'select', [ 'layer', 'segment', 'wrapping' ]).name('mode').onChange((mode) => {
-    viewerList.select = mode
-    setMode(viewerList)
-  })
-
   if (mode === 'layer') {
+    gui = new GUI()
+    gui.title(date)
+    gui.add({ select: mode }, 'select', [ 'layer', 'segment', 'wrapping' ]).name('mode').onChange((mode) => {
+      viewerList.select = mode
+      setMode(viewerList)
+    })
+
     gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').listen().onChange(() => updateViewer(viewer, 'layer'))
     gui.add(viewer.params.segments, 'select', viewer.params.segments.options).name('segments').listen().onChange(async() => {
       const sID = viewer.params.segments.getID[ viewer.params.segments.select ]
@@ -171,6 +174,12 @@ function updateGUI(viewerList) {
   }
 
   if (mode === 'segment') {
+    gui = new GUI()
+    gui.title(date)
+    gui.add({ select: mode }, 'select', [ 'layer', 'segment', 'wrapping' ]).name('mode').onChange((mode) => {
+      viewerList.select = mode
+      setMode(viewerList)
+    })
     gui.add(viewer.params.segmentLayers, 'select', viewer.params.segmentLayers.options).name('segments').onChange(() => {
       updateViewer(viewer, 'segment')
       updateGUI(viewerList)
@@ -196,6 +205,12 @@ function updateGUI(viewerList) {
   }
 
   if (mode === 'wrapping') {
+    gui = new GUI({ width: 600 })
+    gui.title(date)
+    gui.add({ select: mode }, 'select', [ 'layer', 'segment', 'wrapping' ]).name('mode').onChange((mode) => {
+      viewerList.select = mode
+      setMode(viewerList)
+    })
     gui.add(viewer.params, 'wrapping', 0, 26.99, 0.01).name('wrapping').listen().onChange(viewer.updateWrapping)
   }
 }
@@ -229,14 +244,14 @@ function uploadPrediction(gui, viewer) {
 }
 
 // loading div element
-function setLoading(vLayer, vSegment) {
+function setLoading(vLayer, vSegment, vWrapping) {
   const loadingDiv = document.createElement('div')
   loadingDiv.id = 'loading'
   loadingDiv.innerHTML = 'Loading ...'
   document.body.appendChild(loadingDiv)
 
   window.setInterval(() => {
-    const isLoading = vLayer.loading || vSegment.loading
+    const isLoading = vLayer.loading || vSegment.loading || vWrapping.loading
     loadingDiv.style.display = isLoading ? 'inline' : 'none'
   }, 500)
 }

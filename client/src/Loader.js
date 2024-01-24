@@ -9,6 +9,8 @@ export default class Loader {
 
   static getSegmentMeta() { return fetch('segment/meta.json').then((res) => res.json()) }
 
+  static getWrappingMeta() { return fetch('wrapping/meta.json').then((res) => res.json()) }
+
   static getSegmentLayerMeta() { return fetch('segment-layer/meta.json').then((res) => res.json()) }
 
   static getSegmentCenterData() { return new OBJLoader().loadAsync('segment-layer/scroll1_center.obj') }
