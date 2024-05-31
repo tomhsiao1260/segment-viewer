@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import Loader from './Loader'
 import ViewerLayer from './core/ViewerLayer'
 import ViewerSegment from './core/ViewerSegment'
-// import ViewerWrapping from './core/ViewerWrapping'
+import ViewerWrapping from './core/ViewerWrapping'
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min'
 
 init()
@@ -10,12 +10,9 @@ init()
 async function init() {
   const volumeMeta = await Loader.getVolumeMeta()
   const segmentMeta = await Loader.getSegmentMeta()
-  const wrappingMeta = undefined
-  // const wrappingMeta = await Loader.getWrappingMeta()
-  const segmentLayerMeta = undefined
-  // const segmentLayerMeta = await Loader.getSegmentLayerMeta()
-  const segmentCenterData = undefined
-  // const segmentCenterData = await Loader.getSegmentCenterData()
+  const wrappingMeta = await Loader.getWrappingMeta()
+  const segmentLayerMeta = await Loader.getSegmentLayerMeta()
+  const segmentCenterData = await Loader.getSegmentCenterData()
   const params = setParams(volumeMeta, segmentMeta, wrappingMeta, segmentLayerMeta, segmentCenterData)
 
   // renderer setup
@@ -28,12 +25,10 @@ async function init() {
 
   const vLayer = new ViewerLayer({ params, renderer, canvas })
   const vSegment = new ViewerSegment({ params, renderer, canvas })
-  const vWrapping = undefined
-  // const vWrapping = new ViewerWrapping({ params, renderer, canvas })
+  const vWrapping = new ViewerWrapping({ params, renderer, canvas })
 
   const url = new URLSearchParams(window.location.search)
-  const mode = 'layer'
-  // const mode = url.get('mode') ? url.get('mode') : 'segment'
+  const mode = url.get('mode') ? url.get('mode') : 'segment'
   const viewerList = { select: mode, options: { 'layer': vLayer, 'segment': vSegment, 'wrapping': vWrapping } }
   setMode(viewerList)
 
@@ -51,13 +46,13 @@ function setMode(viewerList) {
 
   viewerList.options.layer.controlDOM.style.display = 'none'
   viewerList.options.segment.controlDOM.style.display = 'none'
-  // viewerList.options.wrapping.controlDOM.style.display = 'none'
+  viewerList.options.wrapping.controlDOM.style.display = 'none'
   viewer.controlDOM.style.display = 'inline'
 
   viewer.setURLParamState()
   if (mode === 'layer') updateViewer(viewer, 'layer')
-  // if (mode === 'segment') updateViewer(viewer, 'segment')
-  // if (mode === 'wrapping') updateViewer(viewer, 'wrapping')
+  if (mode === 'segment') updateViewer(viewer, 'segment')
+  if (mode === 'wrapping') updateViewer(viewer, 'wrapping')
 
   updateGUI(viewerList)
 }
@@ -82,12 +77,12 @@ function setParams(volumeMeta, segmentMeta, wrappingMeta, segmentLayerMeta, segm
     params.segments.options[ id ] = i
     params.segments.getID[ i ] = id
   }
-  // // list all segment options (with cutting)
-  // for (let i = 0; i < segmentLayerMeta.segment.length; i++) {
-  //   const id = segmentLayerMeta.segment[i].id
-  //   params.segmentLayers.options[ id ] = i
-  //   params.segmentLayers.getID[ i ] = id
-  // }
+  // list all segment options (with cutting)
+  for (let i = 0; i < segmentLayerMeta.segment.length; i++) {
+    const id = segmentLayerMeta.segment[i].id
+    params.segmentLayers.options[ id ] = i
+    params.segmentLayers.getID[ i ] = id
+  }
 
   return params
 }
@@ -138,15 +133,14 @@ let gui
 function updateGUI(viewerList) {
   const mode = viewerList.select
   const viewer = viewerList.options[mode]
-  const date = '2024/05/31'
+  const date = '2024/01/24'
 
   if (gui) { gui.destroy() }
 
   if (mode === 'layer') {
     gui = new GUI()
     gui.title(date)
-    gui.add({ select: mode }, 'select', [ 'layer' ]).name('mode').onChange((mode) => {
-    // gui.add({ select: mode }, 'select', [ 'layer', 'segment', 'wrapping' ]).name('mode').onChange((mode) => {
+    gui.add({ select: mode }, 'select', [ 'layer', 'segment', 'wrapping' ]).name('mode').onChange((mode) => {
       viewerList.select = mode
       setMode(viewerList)
     })
@@ -257,8 +251,7 @@ function setLoading(vLayer, vSegment, vWrapping) {
   document.body.appendChild(loadingDiv)
 
   window.setInterval(() => {
-    const isLoading = vLayer.loading || vSegment.loading
-    // const isLoading = vLayer.loading || vSegment.loading || vWrapping.loading
+    const isLoading = vLayer.loading || vSegment.loading || vWrapping.loading
     loadingDiv.style.display = isLoading ? 'inline' : 'none'
   }, 500)
 }

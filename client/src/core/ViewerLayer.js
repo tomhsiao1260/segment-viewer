@@ -182,7 +182,7 @@ export default class ViewerLayer {
 
     this.subSegmentMeta = await Loader.getSubSegmentMeta(layer)
     this.subVolumeMeta = await Loader.getSubVolumeMeta(layer)
-    // if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
+    if (index < 11) { this.subVolumeMeta = await Loader.getSubVolumeMeta(layer) }
 
     await this.updateClipGeometry()
     await this.updateFocusGeometry()
