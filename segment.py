@@ -117,7 +117,7 @@ def clip_obj(data, layer):
 
 GAP = 5
 INTERVAL = 50
-MAX_LAYER = 14370
+MAX_LAYER = config['MAX_LAYER']
 LAYER_LIST = []
 
 # for i in range(10): LAYER_LIST.append(i * INTERVAL)

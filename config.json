@@ -1,5 +1,8 @@
 {
   "OBJ_INPUT": "../full-scrolls/Scroll1.volpkg/paths",
   "TIF_INPUT": "../full-scrolls/Scroll1.volpkg/volumes/20230205180739",
-  "TIF_SMALL_INPUT": "../full-scrolls/Scroll1.volpkg/volumes_small/20230205180739"
+  "TIF_SMALL_INPUT": "../full-scrolls/Scroll1.volpkg/volumes_small/20230205180739",
+  "MAX_LAYER": 14375,
+  "WIDTH": 8096,
+  "HEIGHT": 7888
 }

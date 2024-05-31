@@ -46,6 +46,14 @@ TIF_INPUT : "../full-scrolls/Scroll1.volpkg/volumes/20230205180739",
 TIF_SMALL_INPUT : "../full-scrolls/Scroll1.volpkg/volumes_small/20230205180739"
 ```
 
+And `MAX_LAYER` means number of layers in `TIF_INPUT` folder. `WIDTH` and `HEIGHT` are the pixel sizes of each `.tif` image.
+
+```python
+MAX_LAYER: 14375
+WIDTH: 8096
+HEIGHT: 7888
+```
+
 There's a file called `volume.py` for converting the `.tif` data into multiple chunks which can be used for rendering via this application. Another file called `segment.py` which can handle segment `.obj` files we need. Let's run these python scripts. It may take a while. Once finished, you will find some `.obj` and `.tif` files generated in `./output/segment` and `./output/volume` folder, respectively.
 
 ```python

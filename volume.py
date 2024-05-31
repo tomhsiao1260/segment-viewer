@@ -23,7 +23,9 @@ os.makedirs(TILE_OUTPUT)
 
 SPLIT = 10
 INTERVAL = 50
-MAX_LAYER = 14370
+MAX_LAYER = config['MAX_LAYER']
+WIDTH = config['WIDTH']
+HEIGHT = config['HEIGHT']
 LAYER_LIST = []
 SUBLAYER_LIST = []
 
@@ -42,7 +44,7 @@ for LAYER in LAYER_LIST:
 
     info = {}
     info['id'] = f'{LAYER:05d}'
-    info['clip'] = { 'x': 0, 'y': 0, 'z': LAYER, 'w': 8096, 'h': 7888, 'd': 1 }
+    info['clip'] = { 'x': 0, 'y': 0, 'z': LAYER, 'w': WIDTH, 'h': HEIGHT, 'd': 1 }
     meta['volume'].append(info)
 
 with open(TILE_INFO, "w") as outfile:
